@@ -1,6 +1,6 @@
 # README #
 
-This library implements advanced Win32 console input. 
+This library implements advanced Win32 console input with mouse and clipboard support. 
 
 ### Features ###
 
@@ -8,7 +8,8 @@ This library implements advanced Win32 console input.
 * Single-line and multi-line mode
 * Mouse and keyboard selection
 * Clipboard support via Ctrl+C, Ctrl+X, Ctrl+V
-* Clickable links anywhere in the output (can be clicked during read_input())
+* Highlight matching bracket
+* Clickable links anywhere in the output (can be clicked during `read_input()`)
 
 ### Goals ###
 
