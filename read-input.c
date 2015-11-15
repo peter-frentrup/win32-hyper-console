@@ -72,6 +72,10 @@ static BOOL insert_input_text(struct console_t *con, int pos, wchar_t *str, int 
 static BOOL insert_input_char(struct console_t *con, int pos, wchar_t ch);
 static BOOL delete_input_text(struct console_t *con, int pos, int length);
 
+void free_memory(void *data) {
+  free(data);
+}
+
 static BOOL init_console(struct console_t *con) {
   assert(con != NULL);
   
@@ -80,12 +84,12 @@ static BOOL init_console(struct console_t *con) {
   con->input_handle = GetStdHandle(STD_INPUT_HANDLE);
   con->output_handle = GetStdHandle(STD_OUTPUT_HANDLE);
   
-  if (con->input_handle == INVALID_HANDLE_VALUE) {
+  if(con->input_handle == INVALID_HANDLE_VALUE) {
     con->error = "GetStdHandle(STD_INPUT_HANDLE)";
     return 0;
   }
   
-  if (con->output_handle == INVALID_HANDLE_VALUE) {
+  if(con->output_handle == INVALID_HANDLE_VALUE) {
     con->error = "GetStdHandle(STD_OUTPUT_HANDLE)";
     return 0;
   }
@@ -159,7 +163,7 @@ static BOOL read_prompt(struct console_t *con, int length) {
   if(con->error)
     return 0;
     
-  free(con->prompt);
+  free_memory(con->prompt);
   con->prompt = NULL;
   con->prompt_size = 0;
   
@@ -183,7 +187,7 @@ static BOOL read_prompt(struct console_t *con, int length) {
   region.Right = con->prompt_size;
   region.Bottom = region.Top;
   if(!ReadConsoleOutputW(con->output_handle, con->prompt, bufsize, bufpos, &region)) {
-    free(con->prompt);
+    free_memory(con->prompt);
     con->prompt = NULL;
     con->prompt_size = 0;
     con->error = "ReadConsoleOutputW";
@@ -196,11 +200,11 @@ static BOOL read_prompt(struct console_t *con, int length) {
 static void free_console(struct console_t *con) {
   assert(con != NULL);
   
-  free(con->input_text);
-  free(con->prompt);
-  free(con->output_buffer);
-  free(con->input_to_output_positions);
-  free(con->output_to_input_positions);
+  free_memory(con->input_text);
+  free_memory(con->prompt);
+  free_memory(con->output_buffer);
+  free_memory(con->input_to_output_positions);
+  free_memory(con->output_to_input_positions);
   memset(con, 0, sizeof(struct console_t));
 }
 
@@ -737,11 +741,11 @@ static BOOL write_output_buffer_lines(struct console_t *con) {
       region.Bottom = region.Top + con->dirty_lines - 1;
       if(!WriteConsoleOutputW(con->output_handle, empty, bufsize, bufpos, &region)) {
         con->error = "WriteConsoleOutputW empty";
-        free(empty);
+        free_memory(empty);
         return 0;
       }
       
-      free(empty);
+      free_memory(empty);
     }
   }
   con->dirty_lines = lines;
