@@ -3,6 +3,10 @@
 
 #include <windows.h>
 
+/** Test whether the current thread is calling read_input() at the moment.
+ */
+BOOL is_handling_input(void);
+
 /** Read a line of input
   
   \return The text entered by the user without trailing newline, or NULL on error. 

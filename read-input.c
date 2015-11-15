@@ -1,4 +1,5 @@
 #include "read-input.h"
+#include "hyperlink-output.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -45,6 +46,13 @@ struct console_input_t {
   unsigned have_colored_fences: 1;
   unsigned multiline_mode: 1;
   unsigned stop: 1;
+  unsigned ignore_input_when_stopped: 1;
+};
+
+struct send_input_t {
+  struct console_input_t *con;
+  INPUT_RECORD input_records[128];
+  DWORD counter;
 };
 
 static BOOL init_console(struct console_input_t *con);
@@ -52,10 +60,13 @@ static BOOL init_buffer(struct console_input_t *con);
 static void init_colors(struct console_input_t *con);
 static BOOL read_prompt(struct console_input_t *con, int length);
 static void free_console(struct console_input_t *con);
+
 static BOOL resize_array(void **arr, int *capacity, int item_size, int newsize);
+
 static int get_output_position_from_input_position(struct console_input_t *con, int i);
 static int get_input_position_from_output_position(struct console_input_t *con, int o);
 static int get_input_position_from_screen_position(struct console_input_t *con, COORD pos, BOOL nearest);
+
 static BOOL resize_output_buffer(struct console_input_t *con, int size);
 static BOOL fill_output_buffer(struct console_input_t *con);
 static BOOL expand_glyphs(struct console_input_t *con);
@@ -67,10 +78,45 @@ static BOOL extend_output_buffer_to_full_lines(struct console_input_t *con);
 static BOOL scroll_screen_if_needed(struct console_input_t *con);
 static BOOL write_output_buffer_lines(struct console_input_t *con);
 static BOOL set_output_cursor_position(struct console_input_t *con);
+
 static BOOL resize_input_text(struct console_input_t *con, int length);
 static BOOL insert_input_text(struct console_input_t *con, int pos, wchar_t *str, int length);
 static BOOL insert_input_char(struct console_input_t *con, int pos, wchar_t ch);
 static BOOL delete_input_text(struct console_input_t *con, int pos, int length);
+
+static void reselect(struct console_input_t *con, int new_pos, int new_anchor);
+static int get_word_start(struct console_input_t *con, int pos);
+static int get_word_end(struct console_input_t *con, int pos);
+static void move_left(struct console_input_t *con, BOOL fix_anchor, BOOL jump_word);
+static void move_right(struct console_input_t *con, BOOL fix_anchor, BOOL jump_word);
+static void move_home(struct console_input_t *con, BOOL fix_anchor);
+static void move_end(struct console_input_t *con, BOOL fix_anchor);
+
+static BOOL delete_selection_no_update(struct console_input_t *con);
+static void copy_to_clipboard(struct console_input_t *con);
+
+static BOOL flush_input(struct send_input_t *context);
+static BOOL send_input(struct send_input_t *context, wchar_t ch);
+
+static void paste_from_clipboard(struct console_input_t *con);
+
+static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er);
+static void handle_key_event(struct console_input_t *con, const KEY_EVENT_RECORD *er);
+
+static void handle_mouse_wheel(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
+static void handle_lbutton_down(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
+static void handle_lbutton_move(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
+static void handle_lbutton_double_click(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
+static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
+
+static void handle_window_buffer_size_event(struct console_input_t *con, const WINDOW_BUFFER_SIZE_RECORD *er);
+static void handle_focus_event(struct console_input_t *con, const FOCUS_EVENT_RECORD *er);
+static void handle_menu_event(struct console_input_t *con, const MENU_EVENT_RECORD *er);
+
+static void finish_input(struct console_input_t *con);
+static BOOL input_loop(struct console_input_t *con);
+
+static struct console_input_t *get_current_input(void);
 
 void free_memory(void *data) {
   free(data);
@@ -144,13 +190,19 @@ static void init_colors(struct console_input_t *con) {
   con->attr_fences = con->attr_default;
   con->attr_missing_fence = con->attr_default;
   
-  if((con->attr_default & 0xFF) == 0x07) // light gray on black
-    con->attr_fences = 0x0F; // white on black;
-  else
-    con->attr_fences = 0x09; // light blue on black;
-    
-    
-  con->attr_missing_fence = 0xCF; // white on light red
+  // light gray on black
+  if((con->attr_default & 0xFF) == (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE)) {
+    // white on black;
+    con->attr_fences = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY;
+  }
+  else {
+    // light blue on black;
+    con->attr_fences = FOREGROUND_BLUE | FOREGROUND_INTENSITY;
+  }
+  
+  
+  // white on light red
+  con->attr_missing_fence = BACKGROUND_RED | BACKGROUND_INTENSITY | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY;
   
 }
 
@@ -1120,12 +1172,6 @@ static void copy_to_clipboard(struct console_input_t *con) {
   CloseClipboard();
 }
 
-struct send_input_t {
-  struct console_input_t *con;
-  INPUT_RECORD input_records[128];
-  DWORD counter;
-};
-
 static BOOL flush_input(struct send_input_t *context) {
   DWORD written;
   
@@ -1352,6 +1398,7 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
         }
         else { // empty selection -> abort edit
           con->stop = TRUE;
+          con->ignore_input_when_stopped = TRUE;
           return;
         }
       }
@@ -1464,6 +1511,9 @@ static void handle_lbutton_double_click(struct console_input_t *con, const MOUSE
 static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
   assert(con != NULL);
   
+  if(hyperlink_system_handle_mouse_event(er))
+    return;
+    
   switch(er->dwEventFlags) {
     case 0:
       // button press/release
@@ -1604,8 +1654,15 @@ static void print_error() {
   LocalFree(msgbuf);
 }
 
+__declspec( thread ) struct console_input_t *current_input_console = NULL;
+
+static struct console_input_t *get_current_input(void) {
+  return current_input_console;
+}
+
 wchar_t *read_input(BOOL multiline_mode) {
   struct console_input_t con[1];
+  struct console_input_t *old_con;
   
   if(!init_console(con))
     return NULL;
@@ -1617,9 +1674,24 @@ wchar_t *read_input(BOOL multiline_mode) {
   con->input_anchor = 0;
   update_output(con);
   
+  old_con = current_input_console;
+  current_input_console = con;
+  
   input_loop(con);
   
-  if(!con->error) {
+  current_input_console = old_con;
+  
+  if(con->error) {
+    fprintf(stderr, "input failed. ");
+    fprintf(stderr, "%s ", con->error);
+    print_error();
+    fprintf(stderr, "\n");
+    
+    free_console(con);
+    return NULL;
+  }
+  
+  if(!con->ignore_input_when_stopped) {
     wchar_t *result = con->input_text;
     con->input_text = NULL;
     con->input_capacity = 0;
@@ -1627,12 +1699,10 @@ wchar_t *read_input(BOOL multiline_mode) {
     return result;
   }
   
-  fprintf(stderr, "input failed. ");
-  fprintf(stderr, "%s ", con->error);
-  print_error();
-  fprintf(stderr, "\n");
-  
   free_console(con);
   return NULL;
 }
 
+BOOL is_handling_input(void) {
+  return get_current_input() != NULL;
+}

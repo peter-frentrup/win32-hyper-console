@@ -1,20 +1,44 @@
+#include "read-input.h"
+#include "hyperlink-output.h"
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "read-input.h"
+
 
 int main() {
   BOOL multiline_mode = FALSE;
   wchar_t *str = NULL;
   
-  printf("Finish with 'quit'. Switch to multi-line mode with 'multi' and back with 'single'\n");
+  init_hyperlink_system();
   
-  do {
-    printf("\nin: ");
+  printf("Finish with '");
+  start_hyperlink(L"perform quit");
+  printf("quit");
+  end_hyperlink();
+  printf("'. ");
+  
+  printf("Switch to multi-line mode with '");
+  start_hyperlink(L"enter multi-line mode");
+  printf("multi");
+  end_hyperlink();
+  printf("' and back with '");
+  start_hyperlink(L"enter single-line mode");
+  printf("single");
+  end_hyperlink();
+  printf("'\n");
+  
+  for(;;) {
+    printf("\ntype ");
+    start_hyperlink(L"need help?");
+    printf("something");
+    end_hyperlink();
+    printf(": ");
+    
     free_memory(str);
     str = read_input(multiline_mode);
     if(!str) 
-      return 1;
+      continue;
     
     wprintf(L"you typed '%s'\n", str);
     
@@ -28,7 +52,11 @@ int main() {
       multiline_mode = FALSE;
     }
     
-  } while(wcscmp(str, L"quit") != 0);
+    if(wcscmp(str, L"quit") == 0)
+      break;
+  }
+  
+  done_hyperlink_system();
   
   return 0;
 }
