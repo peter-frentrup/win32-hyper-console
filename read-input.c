@@ -10,7 +10,7 @@
 #endif
 
 
-struct console_t {
+struct console_input_t {
   HANDLE input_handle;
   HANDLE output_handle;
   
@@ -47,39 +47,39 @@ struct console_t {
   unsigned stop: 1;
 };
 
-static BOOL init_console(struct console_t *con);
-static BOOL init_buffer(struct console_t *con);
-static void init_colors(struct console_t *con);
-static BOOL read_prompt(struct console_t *con, int length);
-static void free_console(struct console_t *con);
+static BOOL init_console(struct console_input_t *con);
+static BOOL init_buffer(struct console_input_t *con);
+static void init_colors(struct console_input_t *con);
+static BOOL read_prompt(struct console_input_t *con, int length);
+static void free_console(struct console_input_t *con);
 static BOOL resize_array(void **arr, int *capacity, int item_size, int newsize);
-static int get_output_position_from_input_position(struct console_t *con, int i);
-static int get_input_position_from_output_position(struct console_t *con, int o);
-static int get_input_position_from_screen_position(struct console_t *con, COORD pos, BOOL nearest);
-static BOOL resize_output_buffer(struct console_t *con, int size);
-static BOOL fill_output_buffer(struct console_t *con);
-static BOOL expand_glyphs(struct console_t *con);
+static int get_output_position_from_input_position(struct console_input_t *con, int i);
+static int get_input_position_from_output_position(struct console_input_t *con, int o);
+static int get_input_position_from_screen_position(struct console_input_t *con, COORD pos, BOOL nearest);
+static BOOL resize_output_buffer(struct console_input_t *con, int size);
+static BOOL fill_output_buffer(struct console_input_t *con);
+static BOOL expand_glyphs(struct console_input_t *con);
 static wchar_t get_opposite_fence(wchar_t ch);
-static int find_matching_fence(struct console_t *con, int pos);
-static BOOL colorize_matching_fences(struct console_t *con);
-static void highlight_selection(struct console_t *con);
-static BOOL extend_output_buffer_to_full_lines(struct console_t *con);
-static BOOL scroll_screen_if_needed(struct console_t *con);
-static BOOL write_output_buffer_lines(struct console_t *con);
-static BOOL set_output_cursor_position(struct console_t *con);
-static BOOL resize_input_text(struct console_t *con, int length);
-static BOOL insert_input_text(struct console_t *con, int pos, wchar_t *str, int length);
-static BOOL insert_input_char(struct console_t *con, int pos, wchar_t ch);
-static BOOL delete_input_text(struct console_t *con, int pos, int length);
+static int find_matching_fence(struct console_input_t *con, int pos);
+static BOOL colorize_matching_fences(struct console_input_t *con);
+static void highlight_selection(struct console_input_t *con);
+static BOOL extend_output_buffer_to_full_lines(struct console_input_t *con);
+static BOOL scroll_screen_if_needed(struct console_input_t *con);
+static BOOL write_output_buffer_lines(struct console_input_t *con);
+static BOOL set_output_cursor_position(struct console_input_t *con);
+static BOOL resize_input_text(struct console_input_t *con, int length);
+static BOOL insert_input_text(struct console_input_t *con, int pos, wchar_t *str, int length);
+static BOOL insert_input_char(struct console_input_t *con, int pos, wchar_t ch);
+static BOOL delete_input_text(struct console_input_t *con, int pos, int length);
 
 void free_memory(void *data) {
   free(data);
 }
 
-static BOOL init_console(struct console_t *con) {
+static BOOL init_console(struct console_input_t *con) {
   assert(con != NULL);
   
-  memset(con, 0, sizeof(struct console_t));
+  memset(con, 0, sizeof(struct console_input_t));
   
   con->input_handle = GetStdHandle(STD_INPUT_HANDLE);
   con->output_handle = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -108,7 +108,7 @@ static BOOL init_console(struct console_t *con) {
   return 1;
 }
 
-static BOOL init_buffer(struct console_t *con) {
+static BOOL init_buffer(struct console_input_t *con) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   
   assert(con != NULL);
@@ -136,7 +136,7 @@ static BOOL init_buffer(struct console_t *con) {
   return read_prompt(con, csbi.dwCursorPosition.X);
 }
 
-static void init_colors(struct console_t *con) {
+static void init_colors(struct console_input_t *con) {
   assert(con != NULL);
   if(con->error)
     return;
@@ -154,7 +154,7 @@ static void init_colors(struct console_t *con) {
   
 }
 
-static BOOL read_prompt(struct console_t *con, int length) {
+static BOOL read_prompt(struct console_input_t *con, int length) {
   COORD bufsize;
   COORD bufpos;
   SMALL_RECT region;
@@ -197,7 +197,7 @@ static BOOL read_prompt(struct console_t *con, int length) {
   return 1;
 }
 
-static void free_console(struct console_t *con) {
+static void free_console(struct console_input_t *con) {
   assert(con != NULL);
   
   free_memory(con->input_text);
@@ -205,7 +205,7 @@ static void free_console(struct console_t *con) {
   free_memory(con->output_buffer);
   free_memory(con->input_to_output_positions);
   free_memory(con->output_to_input_positions);
-  memset(con, 0, sizeof(struct console_t));
+  memset(con, 0, sizeof(struct console_input_t));
 }
 
 static BOOL resize_array(void **arr, int *capacity, int item_size, int newsize) {
@@ -237,7 +237,7 @@ static BOOL resize_array(void **arr, int *capacity, int item_size, int newsize) 
   return 1;
 }
 
-static int get_output_position_from_input_position(struct console_t *con, int i) {
+static int get_output_position_from_input_position(struct console_input_t *con, int i) {
   assert(con != NULL);
   if(con->error)
     return 0;
@@ -247,7 +247,7 @@ static int get_output_position_from_input_position(struct console_t *con, int i)
   return con->input_to_output_positions[i];
 }
 
-static int get_input_position_from_output_position(struct console_t *con, int o) {
+static int get_input_position_from_output_position(struct console_input_t *con, int o) {
   assert(con != NULL);
   if(con->error)
     return 0;
@@ -264,7 +264,7 @@ static int get_input_position_from_output_position(struct console_t *con, int o)
   return con->output_to_input_positions[o];
 }
 
-static int get_input_position_from_screen_position(struct console_t *con, COORD pos, BOOL nearest) {
+static int get_input_position_from_screen_position(struct console_input_t *con, COORD pos, BOOL nearest) {
   int index;
   
   assert(con != NULL);
@@ -287,7 +287,7 @@ static int get_input_position_from_screen_position(struct console_t *con, COORD 
   return get_input_position_from_output_position(con, index);
 }
 
-static BOOL resize_output_buffer(struct console_t *con, int size) {
+static BOOL resize_output_buffer(struct console_input_t *con, int size) {
   assert(con != NULL);
   
   if(con->error)
@@ -319,7 +319,7 @@ static BOOL resize_output_buffer(struct console_t *con, int size) {
   return 1;
 }
 
-static BOOL fill_output_buffer(struct console_t *con) {
+static BOOL fill_output_buffer(struct console_input_t *con) {
   CHAR_INFO *p;
   wchar_t *s;
   int len;
@@ -363,7 +363,7 @@ static BOOL fill_output_buffer(struct console_t *con) {
   return 1;
 }
 
-static BOOL insert_glyph(struct console_t *con, int pos, CHAR_INFO glyph, int repeat) {
+static BOOL insert_glyph(struct console_input_t *con, int pos, CHAR_INFO glyph, int repeat) {
   int i;
   int input_pos;
   
@@ -409,7 +409,7 @@ static BOOL insert_glyph(struct console_t *con, int pos, CHAR_INFO glyph, int re
   return TRUE;
 }
 
-static BOOL expand_glyphs(struct console_t *con) {
+static BOOL expand_glyphs(struct console_input_t *con) {
   int bufpos;
   int console_width;
   int tab_width = 8;
@@ -483,7 +483,7 @@ static wchar_t get_opposite_fence(wchar_t ch) {
   }
 }
 
-static int find_matching_fence(struct console_t *con, int pos) {
+static int find_matching_fence(struct console_input_t *con, int pos) {
   int direction;
   wchar_t fence;
   wchar_t other_fence;
@@ -536,7 +536,7 @@ static int find_matching_fence(struct console_t *con, int pos) {
   return -1;
 }
 
-static BOOL colorize_matching_fences(struct console_t *con) {
+static BOOL colorize_matching_fences(struct console_input_t *con) {
   int other_pos;
   int pos;
   int buf_pos;
@@ -579,7 +579,7 @@ static BOOL colorize_matching_fences(struct console_t *con) {
   return FALSE;
 }
 
-static void highlight_selection(struct console_t *con) {
+static void highlight_selection(struct console_input_t *con) {
   int s;
   int e;
   
@@ -610,7 +610,7 @@ static void highlight_selection(struct console_t *con) {
   }
 }
 
-static BOOL extend_output_buffer_to_full_lines(struct console_t *con) {
+static BOOL extend_output_buffer_to_full_lines(struct console_input_t *con) {
   int console_width;
   int old_size;
   int i;
@@ -643,7 +643,7 @@ static BOOL extend_output_buffer_to_full_lines(struct console_t *con) {
   return 1;
 }
 
-static BOOL scroll_screen_if_needed(struct console_t *con) {
+static BOOL scroll_screen_if_needed(struct console_input_t *con) {
   int last_pos;
   int cur_pos;
   int last_line;
@@ -704,7 +704,7 @@ static BOOL scroll_screen_if_needed(struct console_t *con) {
 }
 
 // Only writes full lines. Does not scroll buffer. Does not update cursor.
-static BOOL write_output_buffer_lines(struct console_t *con) {
+static BOOL write_output_buffer_lines(struct console_input_t *con) {
   COORD bufsize;
   COORD bufpos;
   SMALL_RECT region;
@@ -769,7 +769,7 @@ static BOOL write_output_buffer_lines(struct console_t *con) {
   return 1;
 }
 
-static BOOL set_output_cursor_position(struct console_t *con) {
+static BOOL set_output_cursor_position(struct console_input_t *con) {
   COORD pos;
   int console_width;
   int output_pos;
@@ -797,7 +797,7 @@ static BOOL set_output_cursor_position(struct console_t *con) {
   return 1;
 }
 
-static BOOL update_output(struct console_t *con) {
+static BOOL update_output(struct console_input_t *con) {
   fill_output_buffer(con);
   colorize_matching_fences(con);
   highlight_selection(con);
@@ -810,7 +810,7 @@ static BOOL update_output(struct console_t *con) {
   return !(con->error);
 }
 
-static BOOL resize_input_text(struct console_t *con, int length) {
+static BOOL resize_input_text(struct console_input_t *con, int length) {
   assert(con != NULL);
   if(con->error)
     return 0;
@@ -842,7 +842,7 @@ static BOOL resize_input_text(struct console_t *con, int length) {
   return 1;
 }
 
-static BOOL insert_input_text(struct console_t *con, int pos, wchar_t *str, int length) {
+static BOOL insert_input_text(struct console_input_t *con, int pos, wchar_t *str, int length) {
   assert(con != NULL);
   if(con->error)
     return 0;
@@ -878,11 +878,11 @@ static BOOL insert_input_text(struct console_t *con, int pos, wchar_t *str, int 
   return 1;
 }
 
-static BOOL insert_input_char(struct console_t *con, int pos, wchar_t ch) {
+static BOOL insert_input_char(struct console_input_t *con, int pos, wchar_t ch) {
   return insert_input_text(con, pos, &ch, 1);
 }
 
-static BOOL delete_input_text(struct console_t *con, int pos, int length) {
+static BOOL delete_input_text(struct console_input_t *con, int pos, int length) {
   assert(con != NULL);
   if(con->error)
     return 0;
@@ -914,7 +914,7 @@ static BOOL delete_input_text(struct console_t *con, int pos, int length) {
   return 1;
 }
 
-static void reselect(struct console_t *con, int new_pos, int new_anchor) {
+static void reselect(struct console_input_t *con, int new_pos, int new_anchor) {
   BOOL need_redraw;
   
   assert(con != NULL);
@@ -944,7 +944,7 @@ static void reselect(struct console_t *con, int new_pos, int new_anchor) {
     set_output_cursor_position(con);
 }
 
-static int get_word_start(struct console_t *con, int pos) {
+static int get_word_start(struct console_input_t *con, int pos) {
   assert(con != NULL);
   if(con->error)
     return 0;
@@ -970,7 +970,7 @@ static int get_word_start(struct console_t *con, int pos) {
   return pos;
 }
 
-static int get_word_end(struct console_t *con, int pos) {
+static int get_word_end(struct console_input_t *con, int pos) {
   assert(con != NULL);
   if(con->error)
     return 0;
@@ -998,7 +998,7 @@ static int get_word_end(struct console_t *con, int pos) {
   return pos;
 }
 
-static void move_left(struct console_t *con, BOOL fix_anchor, BOOL jump_word) {
+static void move_left(struct console_input_t *con, BOOL fix_anchor, BOOL jump_word) {
   int new_pos;
   
   assert(con != NULL);
@@ -1022,7 +1022,7 @@ static void move_left(struct console_t *con, BOOL fix_anchor, BOOL jump_word) {
   }
 }
 
-static void move_right(struct console_t *con, BOOL fix_anchor, BOOL jump_word) {
+static void move_right(struct console_input_t *con, BOOL fix_anchor, BOOL jump_word) {
   int new_pos;
   
   assert(con != NULL);
@@ -1048,21 +1048,21 @@ static void move_right(struct console_t *con, BOOL fix_anchor, BOOL jump_word) {
   }
 }
 
-static void move_home(struct console_t *con, BOOL fix_anchor) {
+static void move_home(struct console_input_t *con, BOOL fix_anchor) {
   if(fix_anchor)
     reselect(con, 0, con->input_anchor);
   else
     reselect(con, 0, 0);
 }
 
-static void move_end(struct console_t *con, BOOL fix_anchor) {
+static void move_end(struct console_input_t *con, BOOL fix_anchor) {
   if(fix_anchor)
     reselect(con, con->input_length, con->input_anchor);
   else
     reselect(con, con->input_length, con->input_length);
 }
 
-static BOOL delete_selection_no_update(struct console_t *con) {
+static BOOL delete_selection_no_update(struct console_input_t *con) {
   assert(con != NULL);
   if(con->error)
     return FALSE;
@@ -1080,7 +1080,7 @@ static BOOL delete_selection_no_update(struct console_t *con) {
   return FALSE;
 }
 
-static void copy_to_clipboard(struct console_t *con) {
+static void copy_to_clipboard(struct console_input_t *con) {
   int start;
   int end;
   HGLOBAL copy_handle;
@@ -1121,7 +1121,7 @@ static void copy_to_clipboard(struct console_t *con) {
 }
 
 struct send_input_t {
-  struct console_t *con;
+  struct console_input_t *con;
   INPUT_RECORD input_records[128];
   DWORD counter;
 };
@@ -1190,7 +1190,7 @@ static BOOL send_input(struct send_input_t *context, wchar_t ch) {
   return TRUE;
 }
 
-static void paste_from_clipboard(struct console_t *con) {
+static void paste_from_clipboard(struct console_input_t *con) {
   HGLOBAL copy_handle;
   wchar_t *copy_data;
   
@@ -1254,7 +1254,7 @@ static void paste_from_clipboard(struct console_t *con) {
   CloseClipboard();
 }
 
-static void handle_key_down(struct console_t *con, const KEY_EVENT_RECORD *er) {
+static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er) {
   assert(con != NULL);
   
   switch(er->wVirtualKeyCode) {
@@ -1388,14 +1388,14 @@ static void handle_key_down(struct console_t *con, const KEY_EVENT_RECORD *er) {
   }
 }
 
-static void handle_key_event(struct console_t *con, const KEY_EVENT_RECORD *er) {
+static void handle_key_event(struct console_input_t *con, const KEY_EVENT_RECORD *er) {
   assert(con != NULL);
   
   if(er->bKeyDown)
     handle_key_down(con, er);
 }
 
-static void handle_mouse_wheel(struct console_t *con, const MOUSE_EVENT_RECORD *er) {
+static void handle_mouse_wheel(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   short scroll_delta = (short)HIWORD(er->dwButtonState);
   int scroll_lines = 3;
@@ -1421,7 +1421,7 @@ static void handle_mouse_wheel(struct console_t *con, const MOUSE_EVENT_RECORD *
   }
 }
 
-static void handle_lbutton_down(struct console_t *con, const MOUSE_EVENT_RECORD *er) {
+static void handle_lbutton_down(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
   int i = get_input_position_from_screen_position(con, er->dwMousePosition, FALSE);
   
   if(i >= 0) {
@@ -1436,7 +1436,7 @@ static void handle_lbutton_down(struct console_t *con, const MOUSE_EVENT_RECORD 
   }
 }
 
-static void handle_lbutton_move(struct console_t *con, const MOUSE_EVENT_RECORD *er) {
+static void handle_lbutton_move(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
   int i = get_input_position_from_screen_position(con, er->dwMousePosition, TRUE);
   
   if(i >= 0 && i != con->input_pos) {
@@ -1446,7 +1446,7 @@ static void handle_lbutton_move(struct console_t *con, const MOUSE_EVENT_RECORD 
   }
 }
 
-static void handle_lbutton_double_click(struct console_t *con, const MOUSE_EVENT_RECORD *er) {
+static void handle_lbutton_double_click(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
   int i = get_input_position_from_screen_position(con, er->dwMousePosition, TRUE);
   
   if(i >= 0) {
@@ -1461,7 +1461,7 @@ static void handle_lbutton_double_click(struct console_t *con, const MOUSE_EVENT
   }
 }
 
-static void handle_mouse_event(struct console_t *con, const MOUSE_EVENT_RECORD *er) {
+static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
   assert(con != NULL);
   
   switch(er->dwEventFlags) {
@@ -1496,19 +1496,19 @@ static void handle_mouse_event(struct console_t *con, const MOUSE_EVENT_RECORD *
   }
 }
 
-static void handle_window_buffer_size_event(struct console_t *con, const WINDOW_BUFFER_SIZE_RECORD *er) {
+static void handle_window_buffer_size_event(struct console_input_t *con, const WINDOW_BUFFER_SIZE_RECORD *er) {
 
 }
 
-static void handle_focus_event(struct console_t *con, const FOCUS_EVENT_RECORD *er) {
+static void handle_focus_event(struct console_input_t *con, const FOCUS_EVENT_RECORD *er) {
 
 }
 
-static void handle_menu_event(struct console_t *con, const MENU_EVENT_RECORD *er) {
+static void handle_menu_event(struct console_input_t *con, const MENU_EVENT_RECORD *er) {
 
 }
 
-static void finish_input(struct console_t *con) {
+static void finish_input(struct console_input_t *con) {
   assert(con != NULL);
   if(con->error)
     return;
@@ -1519,7 +1519,7 @@ static void finish_input(struct console_t *con) {
   update_output(con);
 }
 
-static BOOL input_loop(struct console_t *con) {
+static BOOL input_loop(struct console_input_t *con) {
   DWORD old_mode;
   
   assert(con != NULL);
@@ -1605,7 +1605,7 @@ static void print_error() {
 }
 
 wchar_t *read_input(BOOL multiline_mode) {
-  struct console_t con[1];
+  struct console_input_t con[1];
   
   if(!init_console(con))
     return NULL;
