@@ -22,6 +22,10 @@
 		<Unit filename="main.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="read-input.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="read-input.h" />
 		<Extensions>
 			<code_completion />
 			<debugger />
