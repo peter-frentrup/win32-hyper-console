@@ -7,6 +7,8 @@
  */
 BOOL is_handling_input(void);
 
+BOOL stop_current_input(BOOL do_abort, const wchar_t *opt_replace_input);
+
 /** Read a line of input
   
   \return The text entered by the user without trailing newline, or NULL on error. 

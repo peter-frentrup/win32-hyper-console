@@ -80,7 +80,7 @@ static BOOL write_output_buffer_lines(struct console_input_t *con);
 static BOOL set_output_cursor_position(struct console_input_t *con);
 
 static BOOL resize_input_text(struct console_input_t *con, int length);
-static BOOL insert_input_text(struct console_input_t *con, int pos, wchar_t *str, int length);
+static BOOL insert_input_text(struct console_input_t *con, int pos,const  wchar_t *str, int length);
 static BOOL insert_input_char(struct console_input_t *con, int pos, wchar_t ch);
 static BOOL delete_input_text(struct console_input_t *con, int pos, int length);
 
@@ -894,22 +894,26 @@ static BOOL resize_input_text(struct console_input_t *con, int length) {
   return 1;
 }
 
-static BOOL insert_input_text(struct console_input_t *con, int pos, wchar_t *str, int length) {
+static BOOL insert_input_text(struct console_input_t *con, int pos, const wchar_t *str, int length) {
   assert(con != NULL);
   if(con->error)
-    return 0;
+    return FALSE;
     
   assert(str != NULL || length == 0);
   
   assert(pos >= 0);
   assert(pos <= con->input_length);
   
-  if(length < 0)
+  if(length < 0) {
     length = (int)wcslen(str);
     
+    if(length < 0)
+      return FALSE;
+  }
+  
   resize_input_text(con, con->input_length + length);
   if(con->error)
-    return 0;
+    return FALSE;
     
   memmove(
       con->input_text + pos + length,
@@ -927,7 +931,7 @@ static BOOL insert_input_text(struct console_input_t *con, int pos, wchar_t *str
   if(pos <= con->input_anchor)
     con->input_anchor += length;
     
-  return 1;
+  return TRUE;
 }
 
 static BOOL insert_input_char(struct console_input_t *con, int pos, wchar_t ch) {
@@ -1437,7 +1441,11 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
 
 static void handle_key_event(struct console_input_t *con, const KEY_EVENT_RECORD *er) {
   assert(con != NULL);
+  assert(er != NULL);
   
+  if(hyperlink_system_handle_key_event(er))
+    return;
+    
   if(er->bKeyDown)
     handle_key_down(con, er);
 }
@@ -1509,7 +1517,7 @@ static void handle_lbutton_double_click(struct console_input_t *con, const MOUSE
 }
 
 static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
-  assert(con != NULL);
+  assert(er != NULL);
   
   if(hyperlink_system_handle_mouse_event(er))
     return;
@@ -1551,7 +1559,12 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
 }
 
 static void handle_focus_event(struct console_input_t *con, const FOCUS_EVENT_RECORD *er) {
-
+  assert(con != NULL);
+  assert(er != NULL);
+  
+  if(hyperlink_system_handle_focus_event(er))
+    return;
+    
 }
 
 static void handle_menu_event(struct console_input_t *con, const MENU_EVENT_RECORD *er) {
@@ -1654,7 +1667,12 @@ static void print_error() {
   LocalFree(msgbuf);
 }
 
-__declspec( thread ) struct console_input_t *current_input_console = NULL;
+#ifdef __GNUC__
+static __thread
+#else
+static __declspec( thread )
+#endif
+struct console_input_t *current_input_console = NULL;
 
 static struct console_input_t *get_current_input(void) {
   return current_input_console;
@@ -1705,4 +1723,22 @@ wchar_t *read_input(BOOL multiline_mode) {
 
 BOOL is_handling_input(void) {
   return get_current_input() != NULL;
+}
+
+BOOL stop_current_input(BOOL do_abort, const wchar_t *opt_replace_input) {
+  struct console_input_t *con;
+  
+  con = get_current_input();
+  if(con == NULL || con->error)
+    return FALSE;
+    
+  if(opt_replace_input) {
+    delete_input_text(con, 0, con->input_length);
+    insert_input_text(con, 0, opt_replace_input, -1);
+    //update_output(con);
+  }
+  
+  con->stop = TRUE;
+  con->ignore_input_when_stopped = do_abort;
+  return TRUE;
 }

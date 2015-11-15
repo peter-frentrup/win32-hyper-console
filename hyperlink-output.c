@@ -1,5 +1,6 @@
 #define UNICODE
 
+#include "read-input.h"
 #include "hyperlink-output.h"
 
 #include <assert.h>
@@ -17,6 +18,7 @@ struct hyperlink_t {
   int end_column;
   
   wchar_t *title;
+  wchar_t *input_text;
   
   WORD attr_previous;
 };
@@ -31,6 +33,7 @@ struct hyperlink_collection_t {
   struct hyperlink_t *last_link;
   
   struct hyperlink_t *mouse_over_link;
+  struct hyperlink_t *pressed_link;
   
   wchar_t old_title[256];
   
@@ -52,6 +55,7 @@ static void clean_old_links(struct hyperlink_collection_t *hc, int first_keep_li
 static struct hyperlink_t *open_new_link(struct hyperlink_collection_t *hc);
 static void close_link(struct hyperlink_collection_t *hc);
 static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t *title, int title_length);
+static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wchar_t *text, int text_length);
 
 static BOOL save_old_console_title(struct hyperlink_collection_t *hc);
 static void set_console_title(struct hyperlink_collection_t *hc, const wchar_t *title);
@@ -61,10 +65,18 @@ static BOOL invert_link_colors(struct hyperlink_collection_t *hc, const struct h
 static BOOL is_global_position_before(int a_line, int a_col, int b_line, int b_col);
 static struct hyperlink_t *find_link(struct hyperlink_collection_t *hc, COORD pos);
 
-static void enter_link(struct hyperlink_collection_t *hc);
-static void leave_link(struct hyperlink_collection_t *hc);
+static void on_mouse_enter_link(struct hyperlink_collection_t *hc);
+static void on_mouse_leave_link(struct hyperlink_collection_t *hc);
+static BOOL set_mouse_over_link(struct hyperlink_collection_t *hc, struct hyperlink_t *link);
+
+static BOOL hs_handle_lbutton_down(struct hyperlink_collection_t *hc, const MOUSE_EVENT_RECORD *er);
+static BOOL hs_handle_mouse_up(struct hyperlink_collection_t *hc, const MOUSE_EVENT_RECORD *er);
 static BOOL hs_handle_mouse_move(struct hyperlink_collection_t *hc, const MOUSE_EVENT_RECORD *er);
 static BOOL hs_handle_mouse_event(struct hyperlink_collection_t *hc, const MOUSE_EVENT_RECORD *er);
+
+static BOOL hs_handle_key_event(struct hyperlink_collection_t *hc, const KEY_EVENT_RECORD *er);
+static BOOL hs_handle_focus_event(struct hyperlink_collection_t *hc, const FOCUS_EVENT_RECORD *er);
+
 
 static void init_hyperlink_collection(struct hyperlink_collection_t *hc) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -102,8 +114,10 @@ static void free_hyperlink_collection(struct hyperlink_collection_t *hc) {
   assert(hc != NULL);
   
   if(hc->mouse_over_link)
-    leave_link(hc);
+    on_mouse_leave_link(hc);
     
+  // hc->selected_link
+  
   while(hc->last_link)
     free_link_at(&hc->last_link);
     
@@ -240,6 +254,7 @@ static void free_link_at(struct hyperlink_t **last_link) {
   *last_link = link->prev_link;
   
   free(link->title);
+  free(link->input_text);
   free(link);
 }
 
@@ -263,8 +278,12 @@ static void clean_old_links(struct hyperlink_collection_t *hc, int first_keep_li
   
   while(*link_ptr) {
     if(hc->mouse_over_link == *link_ptr) {
-      leave_link(hc);
+      on_mouse_leave_link(hc);
       hc->mouse_over_link = NULL;
+    }
+    
+    if(hc->pressed_link == *link_ptr) {
+      hc->pressed_link = NULL;
     }
     
     free_link_at(link_ptr);
@@ -377,13 +396,54 @@ static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t
   assert(link != NULL);
   
   free(link->title);
-  link->title = malloc((title_length + 1) * sizeof(wchar_t));
-  if(link->title) {
-    memcpy(
-        link->title,
-        title,
-        title_length * sizeof(wchar_t));
-    link->title[title_length] = L'\0';
+  if(title) {
+    link->title = malloc((title_length + 1) * sizeof(wchar_t));
+    if(link->title) {
+      memcpy(
+          link->title,
+          title,
+          title_length * sizeof(wchar_t));
+      link->title[title_length] = L'\0';
+    }
+  }
+  else {
+    link->title = NULL;
+  }
+}
+
+static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wchar_t *text, int text_length) {
+  struct hyperlink_t *link;
+  
+  assert(hc != NULL);
+  assert(text != NULL || text_length == 0);
+  
+  if(hc->num_failed_open_links > 0)
+    return;
+    
+  if(text_length < 0) {
+    text_length = wcslen(text);
+    
+    if(text_length < 0)
+      return;
+  }
+  
+  link = hc->last_link;
+  assert(hc->num_open_links > 0);
+  assert(link != NULL);
+  
+  free(link->input_text);
+  if(text) {
+    link->input_text = malloc((text_length + 1) * sizeof(wchar_t));
+    if(link->input_text) {
+      memcpy(
+          link->input_text,
+          text,
+          text_length * sizeof(wchar_t));
+      link->input_text[text_length] = L'\0';
+    }
+  }
+  else {
+    link->input_text = NULL;
   }
 }
 
@@ -408,6 +468,7 @@ static BOOL save_old_console_title(struct hyperlink_collection_t *hc) {
   //return TRUE;
   
   GetConsoleTitleW(hc->old_title, ARRAYSIZE(hc->old_title));
+  return TRUE;
 }
 
 static void set_console_title(struct hyperlink_collection_t *hc, const wchar_t *title) {
@@ -431,14 +492,14 @@ static BOOL invert_link_colors(struct hyperlink_collection_t *hc, const struct h
   
   if(!GetConsoleScreenBufferInfo(hc->output_handle, &csbi))
     return FALSE;
-  
+    
   pos = csbi.dwCursorPosition;
   top_global_line = guess_global_line_number(hc, pos);
   if(top_global_line <= 0)
     return FALSE;
-  
-  top_global_line-= pos.Y;
     
+  top_global_line -= pos.Y;
+  
   length = (1 + link->end_global_line - link->start_global_line) * hc->console_size.X;
   length -= link->start_column;
   length -= hc->console_size.X - link->end_column;
@@ -509,17 +570,17 @@ static struct hyperlink_t *find_link(struct hyperlink_collection_t *hc, COORD po
   return NULL;
 }
 
-static void enter_link(struct hyperlink_collection_t *hc) {
+static void on_mouse_enter_link(struct hyperlink_collection_t *hc) {
   assert(hc != NULL);
   assert(hc->mouse_over_link != NULL);
   
   if(save_old_console_title(hc))
     set_console_title(hc, hc->mouse_over_link->title);
-  
+    
   invert_link_colors(hc, hc->mouse_over_link);
 }
 
-static void leave_link(struct hyperlink_collection_t *hc) {
+static void on_mouse_leave_link(struct hyperlink_collection_t *hc) {
   assert(hc != NULL);
   assert(hc->mouse_over_link != NULL);
   
@@ -528,23 +589,79 @@ static void leave_link(struct hyperlink_collection_t *hc) {
   invert_link_colors(hc, hc->mouse_over_link);
 }
 
+static BOOL set_mouse_over_link(struct hyperlink_collection_t *hc, struct hyperlink_t *link) {
+  assert(hc != NULL);
+  
+  if(link != hc->mouse_over_link) {
+    if(hc->mouse_over_link)
+      on_mouse_leave_link(hc);
+      
+    hc->mouse_over_link = link;
+    if(hc->mouse_over_link)
+      on_mouse_enter_link(hc);
+      
+    return TRUE;
+  }
+  
+  return FALSE;
+}
+
+static BOOL hs_handle_lbutton_down(struct hyperlink_collection_t *hc, const MOUSE_EVENT_RECORD *er) {
+  assert(hc != NULL);
+  assert(er != NULL);
+  
+  set_mouse_over_link(hc, find_link(hc, er->dwMousePosition));
+  
+  if(hc->pressed_link && hc->pressed_link != hc->mouse_over_link)
+    invert_link_colors(hc, hc->pressed_link);
+    
+  hc->pressed_link = hc->mouse_over_link;
+  if(hc->pressed_link) {
+    invert_link_colors(hc, hc->pressed_link);
+    
+    return TRUE;
+  }
+  
+  return FALSE;
+}
+
+static BOOL hs_handle_mouse_up(struct hyperlink_collection_t *hc, const MOUSE_EVENT_RECORD *er) {
+  assert(hc != NULL);
+  assert(er != NULL);
+  
+  if(er->dwButtonState == 0) {
+    if(hc->pressed_link) {
+      if(hc->pressed_link->input_text) {
+        if(!stop_current_input(FALSE, hc->pressed_link->input_text)) {
+          // beep
+        }
+      }
+      
+      invert_link_colors(hc, hc->pressed_link);
+      hc->pressed_link = NULL;
+      return TRUE;
+    }
+  }
+  
+  return FALSE;
+}
+
 static BOOL hs_handle_mouse_move(struct hyperlink_collection_t *hc, const MOUSE_EVENT_RECORD *er) {
   assert(hc != NULL);
   assert(er != NULL);
   
   if(er->dwButtonState == 0) {
+    return set_mouse_over_link(hc, find_link(hc, er->dwMousePosition));
+  }
+  else if(hc->pressed_link) {
     struct hyperlink_t *link = find_link(hc, er->dwMousePosition);
     
-    if(link != hc->mouse_over_link) {
-      if(hc->mouse_over_link)
-        leave_link(hc);
-        
-      hc->mouse_over_link = link;
-      if(hc->mouse_over_link)
-        enter_link(hc);
-        
-      return TRUE;
-    }
+    if(link != hc->pressed_link)
+      set_mouse_over_link(hc, NULL);
+    else
+      set_mouse_over_link(hc, hc->pressed_link);
+      
+    return TRUE;
   }
   
   return FALSE;
@@ -557,10 +674,47 @@ static BOOL hs_handle_mouse_event(struct hyperlink_collection_t *hc, const MOUSE
   switch(er->dwEventFlags) {
     case 0:
       // button press/release
+      if(er->dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) {
+        return hs_handle_lbutton_down(hc, er);
+      }
+      else
+        return hs_handle_mouse_up(hc, er);
       break;
       
     case MOUSE_MOVED:
       return hs_handle_mouse_move(hc, er);
+  }
+  
+  return FALSE;
+}
+
+static BOOL hs_handle_key_event(struct hyperlink_collection_t *hc, const KEY_EVENT_RECORD *er) {
+  assert(hc != NULL);
+  assert(er != NULL);
+  
+  set_mouse_over_link(hc, NULL);
+  if(hc->pressed_link) {
+    invert_link_colors(hc, hc->pressed_link);
+    
+    hc->pressed_link = NULL;
+  }
+  
+  return FALSE;
+}
+
+static BOOL hs_handle_focus_event(struct hyperlink_collection_t *hc, const FOCUS_EVENT_RECORD *er) {
+  assert(hc != NULL);
+  assert(er != NULL);
+  
+  if(!er->bSetFocus) {
+    set_mouse_over_link(hc, NULL);
+    if(hc->pressed_link) {
+      invert_link_colors(hc, hc->pressed_link);
+      
+      hc->pressed_link = NULL;
+    }
+    
+    return FALSE;
   }
   
   return FALSE;
@@ -591,6 +745,16 @@ void end_hyperlink(void) {
   LeaveCriticalSection(_cs_global_links);
 }
 
+void set_hyperlink_input_text(const wchar_t *text) {
+  assert(_have_hyperlink_system);
+  
+  EnterCriticalSection(_cs_global_links);
+  
+  set_open_link_input_text(_global_links, text, text ? -1 : 0);
+  
+  LeaveCriticalSection(_cs_global_links);
+}
+
 BOOL hyperlink_system_handle_mouse_event(const MOUSE_EVENT_RECORD *er) {
   BOOL handled;
   
@@ -600,6 +764,36 @@ BOOL hyperlink_system_handle_mouse_event(const MOUSE_EVENT_RECORD *er) {
   EnterCriticalSection(_cs_global_links);
   
   handled = hs_handle_mouse_event(_global_links, er);
+  
+  LeaveCriticalSection(_cs_global_links);
+  
+  return handled;
+}
+
+BOOL hyperlink_system_handle_key_event(const KEY_EVENT_RECORD *er) {
+  BOOL handled;
+  
+  if(!_have_hyperlink_system)
+    return FALSE;
+    
+  EnterCriticalSection(_cs_global_links);
+  
+  handled = hs_handle_key_event(_global_links, er);
+  
+  LeaveCriticalSection(_cs_global_links);
+  
+  return handled;
+}
+
+BOOL hyperlink_system_handle_focus_event(const FOCUS_EVENT_RECORD *er) {
+  BOOL handled;
+  
+  if(!_have_hyperlink_system)
+    return FALSE;
+    
+  EnterCriticalSection(_cs_global_links);
+  
+  handled = hs_handle_focus_event(_global_links, er);
   
   LeaveCriticalSection(_cs_global_links);
   
