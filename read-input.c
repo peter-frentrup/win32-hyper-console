@@ -39,12 +39,12 @@ struct console_t {
   int *output_to_input_positions; // [output_size]
   int output_to_input_capacity;
   
-  int dirty_lines;
-  BOOL have_colored_fences;
-  
-  BOOL multiline_mode;
-  BOOL stop;
   const char *error;
+  int dirty_lines;
+  unsigned use_position_dependent_coloring;
+  unsigned have_colored_fences: 1;
+  unsigned multiline_mode: 1;
+  unsigned stop: 1;
 };
 
 static BOOL init_console(struct console_t *con);
@@ -99,6 +99,7 @@ static BOOL init_console(struct console_t *con) {
   }
   
   con->input_text[0] = L'\0';
+  con->use_position_dependent_coloring = TRUE;
   
   return 1;
 }
@@ -543,6 +544,9 @@ static BOOL colorize_matching_fences(struct console_t *con) {
     
   con->have_colored_fences = FALSE;
   
+  if(!con->use_position_dependent_coloring)
+    return FALSE;
+    
   if(con->input_anchor != con->input_pos)
     return FALSE;
     
@@ -1255,11 +1259,6 @@ static void handle_key_down(struct console_t *con, const KEY_EVENT_RECORD *er) {
         if(con->input_pos == con->input_length && con->input_pos > 0 && con->input_text[con->input_pos - 1] == L'\n') {
           con->stop = 1;
           con->input_length -= 1;
-          con->input_text[con->input_length] = L'\0';
-          con->input_pos = con->input_anchor = con->input_length;
-          if(scroll_screen_if_needed(con))
-            update_output(con);
-          set_output_cursor_position(con);
           return;
         }
         else {
@@ -1505,6 +1504,17 @@ static void handle_menu_event(struct console_t *con, const MENU_EVENT_RECORD *er
 
 }
 
+static void finish_input(struct console_t *con) {
+  assert(con != NULL);
+  if(con->error)
+    return;
+    
+  con->input_text[con->input_length] = L'\0';
+  con->input_pos = con->input_anchor = con->input_length;
+  con->use_position_dependent_coloring = FALSE;
+  update_output(con);
+}
+
 static BOOL input_loop(struct console_t *con) {
   DWORD old_mode;
   
@@ -1561,6 +1571,8 @@ static BOOL input_loop(struct console_t *con) {
       }
     }
   }
+  
+  finish_input(con);
   
   if(!WriteConsoleA(con->output_handle, "\n", 1, NULL, NULL))
     con->error = "WriteConsoleA";
