@@ -1144,7 +1144,7 @@ static void copy_to_clipboard(struct console_input_t *con) {
   
   assert(con != NULL);
   if(con->error)
-    return FALSE;
+    return;
     
   if(con->input_anchor < con->input_pos) {
     start = con->input_anchor;
@@ -1246,7 +1246,7 @@ static void paste_from_clipboard(struct console_input_t *con) {
   
   assert(con != NULL);
   if(con->error)
-    return FALSE;
+    return;
     
   if(!IsClipboardFormatAvailable(CF_UNICODETEXT))
     return;
