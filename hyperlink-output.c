@@ -108,6 +108,8 @@ static void init_colors(struct hyperlink_collection_t *hc) {
   else {
     hc->attr_link = (hc->attr_default & 0xF0) | FOREGROUND_GREEN | FOREGROUND_BLUE;
   }
+  
+  hc->attr_link = hc->attr_link | COMMON_LVB_UNDERSCORE;
 }
 
 static void free_hyperlink_collection(struct hyperlink_collection_t *hc) {
@@ -359,6 +361,8 @@ static void close_link(struct hyperlink_collection_t *hc) {
   
   assert(hc->num_open_links > 0);
   assert(link != NULL);
+    
+  SetConsoleTextAttribute(hc->output_handle, link->attr_previous);
   
   hc->num_open_links--;
   if(GetConsoleScreenBufferInfo(hc->output_handle, &csbi)) {
@@ -374,8 +378,6 @@ static void close_link(struct hyperlink_collection_t *hc) {
     
     link->end_global_line = global_line;
     link->end_column = csbi.dwCursorPosition.X;
-    
-    SetConsoleTextAttribute(hc->output_handle, link->attr_previous);
   }
 }
 
