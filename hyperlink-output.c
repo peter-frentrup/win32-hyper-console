@@ -130,9 +130,13 @@ static void free_hyperlink_collection(struct hyperlink_collection_t *hc) {
    We therefore misuse the high-order attribute bytes of the first LINE_CANARY_SIZE many characters
    in a line.
    These reserved for COMMON_LVB_XXX attributes, which only function with DBCS and seem to have no
-   effect otherwise (sadly though, because COMMON_LVB_UNDERSCORE might be nice for hyperlinks).
+   effect otherwise (only until Win10 though).
 
    The assumption here is that 1) these bytes are normally unset and 2) no one else needs them.
+   
+   BUG: This does not work on Windows 10, because the COMMON_LVB_XXX attributes are used there.
+   
+   TODO: find another way to store line canary.
  */
 static int get_line_canary(struct hyperlink_collection_t *hc, int buffer_line) {
   COORD pos;
