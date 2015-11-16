@@ -1061,7 +1061,10 @@ static void move_left(struct console_input_t *con, BOOL fix_anchor, BOOL jump_wo
   if(con->error)
     return;
     
-  new_pos = con->input_pos - 1;
+  new_pos = con->input_pos;
+  if (new_pos > 0)
+    new_pos--;
+  
   if(jump_word)
     new_pos = get_word_start(con, new_pos);
     
