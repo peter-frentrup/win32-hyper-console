@@ -5,6 +5,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+static void write_links_sentence(const wchar_t *text) {
+  wchar_t *str = wcsdup(text);
+  
+  wchar_t *s = str;
+  while(*s) {
+    while(*s && !iswalnum(*s))
+      putwchar(*s++);
+    
+    if(*s) {
+      wchar_t ch;
+      wchar_t *e = s + 1;
+      while(*e && iswalnum(*e))
+        ++e;
+      
+      ch = *e;
+      *e = L'\0';
+      start_hyperlink(s);
+      set_hyperlink_input_text(s);
+      *e = ch;
+      
+      while(s != e)
+        putwchar(*s++);
+      
+      end_hyperlink();
+    }
+  }
+  
+  free(str);
+}
 
 int main() {
   BOOL multiline_mode = FALSE;
@@ -78,6 +107,17 @@ int main() {
       printf("'\n");
       
       printf("You can use keyboard shortcuts Ctrl+C, Ctrl+X, Ctrl+V to access the clipboard.\n");
+    }
+    
+    if(wcscmp(str, L"lorem") == 0) {
+      write_links_sentence(
+        L"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt "
+        L"ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation "
+        L"ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in "
+        L"reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur "
+        L"sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est "
+        L"laborum.\n"
+      );
     }
     
     if(wcscmp(str, L"quit") == 0)
