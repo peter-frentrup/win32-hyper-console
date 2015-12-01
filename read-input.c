@@ -132,12 +132,12 @@ static BOOL init_console(struct console_input_t *con) {
   
   if(con->input_handle == INVALID_HANDLE_VALUE) {
     con->error = "GetStdHandle(STD_INPUT_HANDLE)";
-    return 0;
+    return FALSE;
   }
   
   if(con->output_handle == INVALID_HANDLE_VALUE) {
     con->error = "GetStdHandle(STD_OUTPUT_HANDLE)";
-    return 0;
+    return FALSE;
   }
   
   con->input_capacity = 256;
@@ -145,13 +145,13 @@ static BOOL init_console(struct console_input_t *con) {
   if(!con->input_text) {
     con->input_capacity = 0;
     con->error = "malloc";
-    return 0;
+    return FALSE;
   }
   
   con->input_text[0] = L'\0';
   con->use_position_dependent_coloring = TRUE;
   
-  return 1;
+  return TRUE;
 }
 
 static BOOL init_buffer(struct console_input_t *con) {
@@ -160,12 +160,12 @@ static BOOL init_buffer(struct console_input_t *con) {
   assert(con != NULL);
   
   if(con->error)
-    return 0;
+    return FALSE;
     
   memset(&csbi, 0, sizeof(csbi));
   if(!GetConsoleScreenBufferInfo(con->output_handle, &csbi)) {
     con->error = "GetConsoleScreenBufferInfo";
-    return 0;
+    return FALSE;
   }
   
   con->console_size = csbi.dwSize;
@@ -176,7 +176,7 @@ static BOOL init_buffer(struct console_input_t *con) {
   
   if(con->console_size.X < 1 || con->console_size.Y < 1) {
     con->error = "GetConsoleScreenBufferInfo size";
-    return 0;
+    return FALSE;
   }
   
   return read_prompt(con, csbi.dwCursorPosition.X);
@@ -213,21 +213,21 @@ static BOOL read_prompt(struct console_input_t *con, int length) {
   
   assert(con != NULL);
   if(con->error)
-    return 0;
+    return FALSE;
     
   free_memory(con->prompt);
   con->prompt = NULL;
   con->prompt_size = 0;
   
   if(length <= 0)
-    return 1;
+    return TRUE;
     
   con->prompt_size = length;
   con->prompt = malloc(sizeof(con->prompt[0]) * con->prompt_size);
   if(!con->prompt) {
     con->prompt_size = 0;
     con->error = "malloc";
-    return 0;
+    return FALSE;
   }
   
   bufsize.X = con->prompt_size;
@@ -243,10 +243,10 @@ static BOOL read_prompt(struct console_input_t *con, int length) {
     con->prompt = NULL;
     con->prompt_size = 0;
     con->error = "ReadConsoleOutputW";
-    return 0;
+    return FALSE;
   }
   
-  return 1;
+  return TRUE;
 }
 
 static void free_console(struct console_input_t *con) {
@@ -268,10 +268,10 @@ static BOOL resize_array(void **arr, int *capacity, int item_size, int newsize) 
   assert(item_size > 0);
   
   if(newsize < 0 || newsize > (1 << 30) / item_size)
-    return 0;
+    return FALSE;
     
   if(newsize <= *capacity)
-    return 1;
+    return TRUE;
     
   newcap = 2 * (*capacity);
   if(newcap <= 0)
@@ -282,11 +282,11 @@ static BOOL resize_array(void **arr, int *capacity, int item_size, int newsize) 
   *arr = realloc(*arr, newcap * item_size);
   if(!*arr) {
     *capacity = 0;
-    return 0;
+    return FALSE;
   }
   
   *capacity = newcap;
-  return 1;
+  return TRUE;
 }
 
 static int get_output_position_from_input_position(struct console_input_t *con, int i) {
@@ -343,7 +343,7 @@ static BOOL resize_output_buffer(struct console_input_t *con, int size) {
   assert(con != NULL);
   
   if(con->error)
-    return 0;
+    return FALSE;
     
   if(!resize_array(
       (void**)&con->output_buffer,
@@ -353,7 +353,7 @@ static BOOL resize_output_buffer(struct console_input_t *con, int size) {
   {
     con->error = "resize_array";
     con->output_size = 0;
-    return 0;
+    return FALSE;
   }
   
   if(!resize_array(
@@ -364,11 +364,11 @@ static BOOL resize_output_buffer(struct console_input_t *con, int size) {
   {
     con->error = "resize_array";
     con->output_size = 0;
-    return 0;
+    return FALSE;
   }
   
   con->output_size = size;
-  return 1;
+  return TRUE;
 }
 
 static BOOL fill_output_buffer(struct console_input_t *con) {
@@ -383,7 +383,7 @@ static BOOL fill_output_buffer(struct console_input_t *con) {
   
   resize_output_buffer(con, con->prompt_size + con->input_length);
   if(con->error)
-    return 0;
+    return FALSE;
     
   memcpy(con->output_buffer, con->prompt, con->prompt_size * sizeof(con->prompt[0]));
   
@@ -412,7 +412,7 @@ static BOOL fill_output_buffer(struct console_input_t *con) {
   
   *i2o = con->output_size;
   
-  return 1;
+  return TRUE;
 }
 
 static BOOL insert_glyph(struct console_input_t *con, int pos, CHAR_INFO glyph, int repeat) {
@@ -670,18 +670,18 @@ static BOOL extend_output_buffer_to_full_lines(struct console_input_t *con) {
   
   assert(con != NULL);
   if(con->error)
-    return 0;
+    return FALSE;
     
   console_width = con->console_size.X;
   assert(console_width > 0);
   
   old_size = con->output_size;
   if(old_size % console_width == 0)
-    return 1;
+    return TRUE;
     
   resize_output_buffer(con, (1 + old_size / console_width) * console_width);
   if(con->error)
-    return 0;
+    return FALSE;
     
   space.Attributes = con->attr_default;
   space.Char.UnicodeChar = L' ';
@@ -692,7 +692,7 @@ static BOOL extend_output_buffer_to_full_lines(struct console_input_t *con) {
     con->output_to_input_positions[i] = con->input_length;
   }
   
-  return 1;
+  return TRUE;
 }
 
 static BOOL scroll_screen_if_needed(struct console_input_t *con) {
@@ -701,7 +701,7 @@ static BOOL scroll_screen_if_needed(struct console_input_t *con) {
   int last_line;
   int cur_line;
   
-  BOOL did_scroll = 0;
+  BOOL did_scroll = FALSE;
   
   assert(con != NULL);
   if(con->error)
@@ -732,7 +732,7 @@ static BOOL scroll_screen_if_needed(struct console_input_t *con) {
     }
     
     con->input_line_coord_y -= scroll_lines;
-    did_scroll = 1;
+    did_scroll = TRUE;
   }
   
   cur_pos = get_output_position_from_input_position(con, con->input_pos);
@@ -744,12 +744,12 @@ static BOOL scroll_screen_if_needed(struct console_input_t *con) {
   if(con->input_line_coord_y + cur_line < 0) {
     con->input_line_coord_y = - cur_line;
     con->dirty_lines = con->console_size.Y;
-    did_scroll = 1;
+    did_scroll = TRUE;
   }
   
   if(con->input_line_coord_y < 0 && last_line <= con->console_size.Y) {
     con->input_line_coord_y = 0;
-    did_scroll = 1;
+    did_scroll = TRUE;
   }
   
   return did_scroll;
@@ -765,7 +765,7 @@ static BOOL write_output_buffer_lines(struct console_input_t *con) {
   
   assert(con != NULL);
   if(con->error)
-    return 0;
+    return FALSE;
     
   console_width = con->console_size.X;
   assert(console_width > 0);
@@ -794,7 +794,7 @@ static BOOL write_output_buffer_lines(struct console_input_t *con) {
       if(!WriteConsoleOutputW(con->output_handle, empty, bufsize, bufpos, &region)) {
         con->error = "WriteConsoleOutputW empty";
         free_memory(empty);
-        return 0;
+        return FALSE;
       }
       
       free_memory(empty);
@@ -814,11 +814,11 @@ static BOOL write_output_buffer_lines(struct console_input_t *con) {
   if(bufsize.Y > 0) {
     if(!WriteConsoleOutputW(con->output_handle, con->output_buffer, bufsize, bufpos, &region)) {
       con->error = "WriteConsoleOutputW";
-      return 0;
+      return FALSE;
     }
   }
   
-  return 1;
+  return TRUE;
 }
 
 static BOOL set_output_cursor_position(struct console_input_t *con) {
@@ -828,7 +828,7 @@ static BOOL set_output_cursor_position(struct console_input_t *con) {
   
   assert(con != NULL);
   if(con->error)
-    return 0;
+    return FALSE;
     
   console_width = con->console_size.X;
   assert(console_width > 0);
@@ -846,7 +846,7 @@ static BOOL set_output_cursor_position(struct console_input_t *con) {
     //  return 0;
   }
   
-  return 1;
+  return TRUE;
 }
 
 static BOOL update_output(struct console_input_t *con) {
@@ -865,7 +865,7 @@ static BOOL update_output(struct console_input_t *con) {
 static BOOL resize_input_text(struct console_input_t *con, int length) {
   assert(con != NULL);
   if(con->error)
-    return 0;
+    return FALSE;
     
   if(!resize_array(
       (void**)&con->input_text,
@@ -875,7 +875,7 @@ static BOOL resize_input_text(struct console_input_t *con, int length) {
   {
     con->error = "resize_array";
     con->input_length = 0;
-    return 0;
+    return FALSE;
   }
   
   if(!resize_array(
@@ -886,12 +886,12 @@ static BOOL resize_input_text(struct console_input_t *con, int length) {
   {
     con->error = "resize_array";
     con->input_length = 0;
-    return 0;
+    return FALSE;
   }
   
   con->input_text[length] = L'\0';
   con->input_length = length;
-  return 1;
+  return TRUE;
 }
 
 static BOOL insert_input_text(struct console_input_t *con, int pos, const wchar_t *str, int length) {
@@ -941,7 +941,7 @@ static BOOL insert_input_char(struct console_input_t *con, int pos, wchar_t ch) 
 static BOOL delete_input_text(struct console_input_t *con, int pos, int length) {
   assert(con != NULL);
   if(con->error)
-    return 0;
+    return FALSE;
     
   assert(pos >= 0);
   assert(pos <= con->input_length);
@@ -955,7 +955,7 @@ static BOOL delete_input_text(struct console_input_t *con, int pos, int length) 
       
   resize_input_text(con, con->input_length - length);
   if(con->error)
-    return 0;
+    return FALSE;
     
   if(pos + length <= con->input_pos)
     con->input_pos -= length;
@@ -967,7 +967,7 @@ static BOOL delete_input_text(struct console_input_t *con, int pos, int length) 
   else if(pos < con->input_anchor)
     con->input_anchor = pos;
     
-  return 1;
+  return TRUE;
 }
 
 static void reselect(struct console_input_t *con, int new_pos, int new_anchor) {
@@ -1590,16 +1590,16 @@ static BOOL input_loop(struct console_input_t *con) {
   
   assert(con != NULL);
   if(con->error)
-    return 0;
+    return FALSE;
     
   if(!GetConsoleMode(con->input_handle, &old_mode)) {
     con->error = "GetConsoleMode";
-    return 0;
+    return FALSE;
   }
   
   if(!SetConsoleMode(con->input_handle, ENABLE_WINDOW_INPUT | ENABLE_MOUSE_INPUT)) {
     con->error = "SetConsoleMode";
-    return 0;
+    return FALSE;
   }
   
   while(!con->stop && !con->error) {
