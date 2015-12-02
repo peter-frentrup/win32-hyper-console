@@ -40,11 +40,15 @@ static void write_links_sentence(const wchar_t *text) {
 }
 
 static void write_unicode(const wchar_t *str) {
-  int oldmode = _setmode(_fileno(stdout), _O_U8TEXT);
+  int oldmode;
+  
+  fflush(stdout);
+  oldmode = _setmode(_fileno(stdout), _O_U8TEXT);
   /* Note that printf and other char* functions do not work at all in _O_U8TEXT mode. */
   
   wprintf(L"%s", str);
   
+  fflush(stdout);
   _setmode(_fileno(stdout), oldmode);
 }
 
