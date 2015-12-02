@@ -2,7 +2,8 @@
 #include "hyperlink-output.h"
 
 #include <assert.h>
-//#include <io.h>
+#include <io.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -42,45 +43,46 @@ int main() {
   BOOL multiline_mode = FALSE;
   wchar_t *str = NULL;
   
-  //_setmode(_fileno(stdout), _O_U16TEXT);
-  //_setmode(_fileno(stderr), _O_U16TEXT);
+  /* Note that the char* version printf does not output anything any more. Need to use wprintf. */
+  _setmode(_fileno(stdout), _O_U8TEXT);
+  _setmode(_fileno(stderr), _O_U8TEXT);
     
   init_hyperlink_system();
   
-  printf("Finish with '");
+  wprintf(L"Finish with '");
   fflush(stdout);
   start_hyperlink(L"perform quit");
   set_hyperlink_input_text(L"quit");
-  printf("quit");
+  wprintf(L"quit");
   fflush(stdout);
   end_hyperlink();
-  printf("'. ");
+  wprintf(L"'. ");
   
-  printf("Switch to multi-line mode with '");
+  wprintf(L"Switch to multi-line mode with '");
   fflush(stdout);
   start_hyperlink(L"enter multi-line mode");
   set_hyperlink_input_text(L"multi");
-  printf("multi");
+  wprintf(L"multi");
   fflush(stdout);
   end_hyperlink();
-  printf("' and back with '");
+  wprintf(L"' and back with '");
   fflush(stdout);
   start_hyperlink(L"enter single-line mode");
   set_hyperlink_input_text(L"single");
-  printf("single");
+  wprintf(L"single");
   fflush(stdout);
   end_hyperlink();
-  printf("'\n");
+  wprintf(L"'\n");
   
   for(;;) {
-    printf("\ntype ");
+    wprintf(L"\ntype ");
     fflush(stdout);
     start_hyperlink(L"need help?");
     set_hyperlink_input_text(L"help");
-    printf("something");
+    wprintf(L"something");
     fflush(stdout);
     end_hyperlink();
-    printf(": ");
+    wprintf(L": ");
     
     free_memory(str);
     str = read_input(multiline_mode);
@@ -100,33 +102,33 @@ int main() {
     }
     
     if(wcscmp(str, L"help") == 0) {
-      printf("The available options are '");
+      wprintf(L"The available options are '");
       fflush(stdout);
       start_hyperlink(L"perform quit");
       set_hyperlink_input_text(L"quit");
-      printf("quit");
+      wprintf(L"quit");
       fflush(stdout);
       end_hyperlink();
       
-      printf("', '");
+      wprintf(L"', '");
       fflush(stdout);
       start_hyperlink(L"change to multi line input mode");
       set_hyperlink_input_text(L"multi");
-      printf("multi");
+      wprintf(L"multi");
       fflush(stdout);
       end_hyperlink();
       
-      printf("' and '");
+      wprintf(L"' and '");
       fflush(stdout);
       start_hyperlink(L"change to single line input mode");
       set_hyperlink_input_text(L"single");
-      printf("single");
+      wprintf(L"single");
       fflush(stdout);
       end_hyperlink();
       
-      printf("'\n");
+      wprintf(L"'\n");
       
-      printf("You can use keyboard shortcuts Ctrl+C, Ctrl+X, Ctrl+V to access the clipboard.\n");
+      wprintf(L"You can use keyboard shortcuts Ctrl+C, Ctrl+X, Ctrl+V to access the clipboard.\n");
     }
     
     if(wcscmp(str, L"lorem") == 0) {
