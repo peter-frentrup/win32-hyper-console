@@ -2,6 +2,7 @@
 #include "hyperlink-output.h"
 
 #include <assert.h>
+//#include <io.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -41,6 +42,9 @@ int main() {
   BOOL multiline_mode = FALSE;
   wchar_t *str = NULL;
   
+  //_setmode(_fileno(stdout), _O_U16TEXT);
+  //_setmode(_fileno(stderr), _O_U16TEXT);
+    
   init_hyperlink_system();
   
   printf("Finish with '");
