@@ -1607,7 +1607,7 @@ static BOOL input_loop(struct console_input_t *con) {
     return FALSE;
   }
   
-  if(!SetConsoleMode(con->input_handle, ENABLE_WINDOW_INPUT | ENABLE_MOUSE_INPUT)) {
+  if(!SetConsoleMode(con->input_handle, ENABLE_WINDOW_INPUT | ENABLE_MOUSE_INPUT | ENABLE_EXTENDED_FLAGS)) {
     con->error = "SetConsoleMode";
     return FALSE;
   }
