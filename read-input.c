@@ -1692,7 +1692,7 @@ static struct console_input_t *get_current_input(void) {
 }
 
 static wchar_t *read_file(FILE *file, BOOL multiline_mode) {
-  wchar_t buffer[5];
+  wchar_t buffer[256];
   
   wchar_t *str = NULL;
   int str_capacity = 0;
@@ -1701,30 +1701,27 @@ static wchar_t *read_file(FILE *file, BOOL multiline_mode) {
   while(fgetws(buffer, ARRAYSIZE(buffer), file)) {
     int len = wcslen(buffer);
     
-    if(len <= 0)
-      break;
+    if(len <= 0) 
+      return str;
     
-    if(!resize_array((void**)&str, &str_capacity, sizeof(wchar_t), str_len + len)) {
-      free_memory(str);
-      return NULL;
-    }
+    if(!resize_array((void**)&str, &str_capacity, sizeof(wchar_t), str_len + len)) 
+      break;
     
     memcpy(str + str_len, buffer, len * sizeof(wchar_t));
     str_len+= len;
     
     if(str[str_len-1] == L'\n') {
       if(multiline_mode) {
-        if(str_len > 1 && str[str_len-2] == L'\n')
-          break;
+        if(str_len > 1 && str[str_len-2] == L'\n') {
+          str[str_len-2] = L'\0';
+          return str;
+        }
       }
-      else
-        break;
+      else {
+        str[str_len-1] = L'\0';
+        return str;
+      }
     }
-  }
-  
-  if(str && str_len > 0) {
-    str[str_len - 1] = L'\0';
-    return str;
   }
 
   free_memory(str);
