@@ -55,6 +55,7 @@ struct send_input_t {
   DWORD counter;
 };
 
+static BOOL is_console(HANDLE handle);
 static BOOL init_console(struct console_input_t *con);
 static BOOL init_buffer(struct console_input_t *con);
 static void init_colors(struct console_input_t *con);
@@ -122,6 +123,11 @@ void free_memory(void *data) {
   free(data);
 }
 
+static BOOL is_console(HANDLE handle) {
+  DWORD mode;
+  return GetConsoleMode(handle, &mode);
+}
+
 static BOOL init_console(struct console_input_t *con) {
   assert(con != NULL);
   
@@ -137,6 +143,10 @@ static BOOL init_console(struct console_input_t *con) {
   
   if(con->output_handle == INVALID_HANDLE_VALUE) {
     con->error = "GetStdHandle(STD_OUTPUT_HANDLE)";
+    return FALSE;
+  }
+  
+  if(!is_console(con->input_handle) || !is_console(con->output_handle)) {
     return FALSE;
   }
   
@@ -1681,12 +1691,54 @@ static struct console_input_t *get_current_input(void) {
   return current_input_console;
 }
 
+static wchar_t *read_file(FILE *file, BOOL multiline_mode) {
+  wchar_t buffer[5];
+  
+  wchar_t *str = NULL;
+  int str_capacity = 0;
+  int str_len = 0;
+  
+  while(fgetws(buffer, ARRAYSIZE(buffer), file)) {
+    int len = wcslen(buffer);
+    
+    if(len <= 0)
+      break;
+    
+    if(!resize_array((void**)&str, &str_capacity, sizeof(wchar_t), str_len + len)) {
+      free_memory(str);
+      return NULL;
+    }
+    
+    memcpy(str + str_len, buffer, len * sizeof(wchar_t));
+    str_len+= len;
+    
+    if(str[str_len-1] == L'\n') {
+      if(multiline_mode) {
+        if(str_len > 1 && str[str_len-2] == L'\n')
+          break;
+      }
+      else
+        break;
+    }
+  }
+  
+  if(str && str_len > 0) {
+    str[str_len - 1] = L'\0';
+    return str;
+  }
+
+  free_memory(str);
+  return NULL;
+}
+
 wchar_t *read_input(BOOL multiline_mode) {
   struct console_input_t con[1];
   struct console_input_t *old_con;
   
-  if(!init_console(con))
-    return NULL;
+  if(!init_console(con)) {
+    fflush(stdout);
+    return read_file(stdin, multiline_mode);
+  }
     
   con->multiline_mode = multiline_mode;
   init_buffer(con);

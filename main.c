@@ -19,6 +19,7 @@ static void write_links_sentence(const wchar_t *text) {
       while(*e && iswalnum(*e))
         ++e;
       
+      fflush(stdout);
       ch = *e;
       *e = L'\0';
       start_hyperlink(s);
@@ -28,6 +29,7 @@ static void write_links_sentence(const wchar_t *text) {
       while(s != e)
         putwchar(*s++);
       
+      fflush(stdout);
       end_hyperlink();
     }
   }
@@ -42,29 +44,37 @@ int main() {
   init_hyperlink_system();
   
   printf("Finish with '");
+  fflush(stdout);
   start_hyperlink(L"perform quit");
   set_hyperlink_input_text(L"quit");
   printf("quit");
+  fflush(stdout);
   end_hyperlink();
   printf("'. ");
   
   printf("Switch to multi-line mode with '");
+  fflush(stdout);
   start_hyperlink(L"enter multi-line mode");
   set_hyperlink_input_text(L"multi");
   printf("multi");
+  fflush(stdout);
   end_hyperlink();
   printf("' and back with '");
+  fflush(stdout);
   start_hyperlink(L"enter single-line mode");
   set_hyperlink_input_text(L"single");
   printf("single");
+  fflush(stdout);
   end_hyperlink();
   printf("'\n");
   
   for(;;) {
     printf("\ntype ");
+    fflush(stdout);
     start_hyperlink(L"need help?");
     set_hyperlink_input_text(L"help");
     printf("something");
+    fflush(stdout);
     end_hyperlink();
     printf(": ");
     
@@ -87,21 +97,27 @@ int main() {
     
     if(wcscmp(str, L"help") == 0) {
       printf("The available options are '");
+      fflush(stdout);
       start_hyperlink(L"perform quit");
       set_hyperlink_input_text(L"quit");
       printf("quit");
+      fflush(stdout);
       end_hyperlink();
       
       printf("', '");
+      fflush(stdout);
       start_hyperlink(L"change to multi line input mode");
       set_hyperlink_input_text(L"multi");
       printf("multi");
+      fflush(stdout);
       end_hyperlink();
       
       printf("' and '");
+      fflush(stdout);
       start_hyperlink(L"change to single line input mode");
       set_hyperlink_input_text(L"single");
       printf("single");
+      fflush(stdout);
       end_hyperlink();
       
       printf("'\n");
