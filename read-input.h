@@ -16,8 +16,4 @@ BOOL stop_current_input(BOOL do_abort, const wchar_t *opt_replace_input);
  */
 wchar_t *read_input(BOOL multiline_mode);
 
-/** Release a block of memory returned by read_input().
- */
-void free_memory(void *data);
-
 #endif // __CONSOLE__READ_INPUT_H__

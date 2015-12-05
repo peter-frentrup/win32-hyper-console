@@ -1,4 +1,5 @@
 #include "read-input.h"
+#include "memory-util.h"
 #include "hyperlink-output.h"
 
 #include <assert.h>
@@ -62,8 +63,6 @@ static void init_colors(struct console_input_t *con);
 static BOOL read_prompt(struct console_input_t *con, int length);
 static void free_console(struct console_input_t *con);
 
-static BOOL resize_array(void **arr, int *capacity, int item_size, int newsize);
-
 static int get_output_position_from_input_position(struct console_input_t *con, int i);
 static int get_input_position_from_output_position(struct console_input_t *con, int o);
 static int get_input_position_from_screen_position(struct console_input_t *con, COORD pos, BOOL nearest);
@@ -118,10 +117,6 @@ static void finish_input(struct console_input_t *con);
 static BOOL input_loop(struct console_input_t *con);
 
 static struct console_input_t *get_current_input(void);
-
-void free_memory(void *data) {
-  free(data);
-}
 
 static BOOL is_console(HANDLE handle) {
   DWORD mode;
@@ -268,35 +263,6 @@ static void free_console(struct console_input_t *con) {
   free_memory(con->input_to_output_positions);
   free_memory(con->output_to_input_positions);
   memset(con, 0, sizeof(struct console_input_t));
-}
-
-static BOOL resize_array(void **arr, int *capacity, int item_size, int newsize) {
-  int newcap;
-  
-  assert(arr != NULL);
-  assert(capacity != NULL);
-  assert(item_size > 0);
-  
-  if(newsize < 0 || newsize > (1 << 30) / item_size)
-    return FALSE;
-    
-  if(newsize <= *capacity)
-    return TRUE;
-    
-  newcap = 2 * (*capacity);
-  if(newcap <= 0)
-    newcap = 1;
-  while(newcap < newsize)
-    newcap *= 2;
-    
-  *arr = realloc(*arr, newcap * item_size);
-  if(!*arr) {
-    *capacity = 0;
-    return FALSE;
-  }
-  
-  *capacity = newcap;
-  return TRUE;
 }
 
 static int get_output_position_from_input_position(struct console_input_t *con, int i) {
