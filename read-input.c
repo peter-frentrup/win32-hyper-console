@@ -702,6 +702,8 @@ static BOOL scroll_screen_if_needed(struct console_input_t *con) {
     space.Attributes = con->attr_default;
     space.Char.UnicodeChar = L' ';
     
+    hyperlink_system_end_input();
+    
     if(!ScrollConsoleScreenBufferW(con->output_handle, &scroll_rect, NULL, dst, &space)) {
       con->error = "ScrollConsoleScreenBufferW";
       return did_scroll;
@@ -709,6 +711,8 @@ static BOOL scroll_screen_if_needed(struct console_input_t *con) {
     
     con->input_line_coord_y -= scroll_lines;
     did_scroll = TRUE;
+    
+    hyperlink_system_start_input(con->input_line_coord_y);
   }
   
   cur_pos = get_output_position_from_input_position(con, con->input_pos);
@@ -1706,6 +1710,8 @@ wchar_t *read_input(BOOL multiline_mode) {
   con->multiline_mode = multiline_mode;
   init_buffer(con);
   
+  hyperlink_system_start_input(con->input_line_coord_y);
+  
   insert_input_text(con, 0, L"default", -1);
   con->input_anchor = 0;
   update_output(con);
@@ -1716,6 +1722,8 @@ wchar_t *read_input(BOOL multiline_mode) {
   input_loop(con);
   
   current_input_console = old_con;
+  
+  hyperlink_system_end_input();
   
   if(con->error) {
     fprintf(stderr, "input failed. ");

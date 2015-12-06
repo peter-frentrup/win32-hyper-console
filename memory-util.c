@@ -32,6 +32,10 @@ BOOL resize_array(void **arr, int *capacity, int item_size, int newsize) {
   return TRUE;
 }
 
+void *allocate_memory(size_t size) {
+  return malloc(size);
+}
+
 void free_memory(void *data) {
   free(data);
 }

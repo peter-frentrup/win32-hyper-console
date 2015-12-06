@@ -12,6 +12,9 @@ BOOL hyperlink_system_handle_mouse_event(const MOUSE_EVENT_RECORD *er);
 BOOL hyperlink_system_handle_key_event(const KEY_EVENT_RECORD *er);
 BOOL hyperlink_system_handle_focus_event(const FOCUS_EVENT_RECORD *er);
 
+void hyperlink_system_start_input(int pre_input_lines);
+void hyperlink_system_end_input(void);
+
 void init_hyperlink_system(void);
 void done_hyperlink_system(void);
 

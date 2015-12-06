@@ -1,10 +1,13 @@
-#define UNICODE
+//#define UNICODE
+#define __CRT_STRSAFE_IMPL
 
 #include "read-input.h"
 #include "hyperlink-output.h"
+#include "scroll-counter.h"
 
 #include <assert.h>
 #include <windows.h>
+#include <strsafe.h>
 
 #define LINE_CANARY_SIZE  3
 
@@ -25,6 +28,8 @@ struct hyperlink_t {
 
 struct hyperlink_collection_t {
   HANDLE output_handle;
+  
+  struct console_scrollback_t *scrollback;
   
   COORD console_size;
   
@@ -77,6 +82,9 @@ static BOOL hs_handle_mouse_event(struct hyperlink_collection_t *hc, const MOUSE
 static BOOL hs_handle_key_event(struct hyperlink_collection_t *hc, const KEY_EVENT_RECORD *er);
 static BOOL hs_handle_focus_event(struct hyperlink_collection_t *hc, const FOCUS_EVENT_RECORD *er);
 
+static void hs_start_input(struct hyperlink_collection_t *hc, int pre_input_lines);
+static void hs_end_input(struct hyperlink_collection_t *hc);
+
 
 static void init_hyperlink_collection(struct hyperlink_collection_t *hc) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -86,6 +94,7 @@ static void init_hyperlink_collection(struct hyperlink_collection_t *hc) {
   memset(hc, 0, sizeof(struct hyperlink_collection_t));
   
   hc->output_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+  hc->scrollback = console_scrollback_new();
   
   hc->console_size.X = 1;
   hc->console_size.Y = 1;
@@ -122,7 +131,9 @@ static void free_hyperlink_collection(struct hyperlink_collection_t *hc) {
   
   while(hc->last_link)
     free_link_at(&hc->last_link);
-    
+  
+  console_scrollback_free(hc->scrollback);
+  
   //free(hc->old_title);
   memset(hc, 0, sizeof(struct hyperlink_collection_t));
 }
@@ -652,9 +663,31 @@ static BOOL hs_handle_mouse_up(struct hyperlink_collection_t *hc, const MOUSE_EV
   return FALSE;
 }
 
+static BOOL write_global_position_to_title(struct hyperlink_collection_t *hc, COORD local) {
+  int line;
+  int column;
+  
+  assert(hc != NULL);
+
+  if(console_scollback_local_to_global(hc->scrollback, local, &line, &column)) {
+    wchar_t buffer[100];
+    
+    StringCbPrintfW(buffer, sizeof(buffer), L"at %d:%d", line, column);
+    set_console_title(hc, buffer);
+    
+    return TRUE;
+  }
+  
+  set_console_title(hc, L"no known global position");
+  
+  return FALSE;
+}
+
 static BOOL hs_handle_mouse_move(struct hyperlink_collection_t *hc, const MOUSE_EVENT_RECORD *er) {
   assert(hc != NULL);
   assert(er != NULL);
+  
+  write_global_position_to_title(hc, er->dwMousePosition);
   
   if(er->dwButtonState == 0) {
     return set_mouse_over_link(hc, find_link(hc, er->dwMousePosition));
@@ -724,6 +757,21 @@ static BOOL hs_handle_focus_event(struct hyperlink_collection_t *hc, const FOCUS
   }
   
   return FALSE;
+}
+
+
+static void hs_start_input(struct hyperlink_collection_t *hc, int pre_input_lines) {
+  assert(hc != NULL);
+  
+  if(pre_input_lines < 0)
+    pre_input_lines = 0;
+  
+  console_scrollback_update(hc->scrollback, pre_input_lines);
+}
+
+static void hs_end_input(struct hyperlink_collection_t *hc) {
+  assert(hc != NULL);
+  
 }
 
 static BOOL _have_hyperlink_system = FALSE;
@@ -804,6 +852,28 @@ BOOL hyperlink_system_handle_focus_event(const FOCUS_EVENT_RECORD *er) {
   LeaveCriticalSection(_cs_global_links);
   
   return handled;
+}
+
+void hyperlink_system_start_input(int pre_input_lines) {
+  if(!_have_hyperlink_system)
+    return FALSE;
+    
+  EnterCriticalSection(_cs_global_links);
+  
+  hs_start_input(_global_links, pre_input_lines);
+  
+  LeaveCriticalSection(_cs_global_links);
+}
+
+void hyperlink_system_end_input(void) {
+  if(!_have_hyperlink_system)
+    return FALSE;
+    
+  EnterCriticalSection(_cs_global_links);
+  
+  hs_end_input(_global_links);
+  
+  LeaveCriticalSection(_cs_global_links);
 }
 
 void init_hyperlink_system(void) {

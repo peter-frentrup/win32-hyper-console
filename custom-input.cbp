@@ -35,10 +35,18 @@
 		<Unit filename="main.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="memory-util.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="memory-util.h" />
 		<Unit filename="read-input.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="read-input.h" />
+		<Unit filename="scroll-counter.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="scroll-counter.h" />
 		<Extensions>
 			<code_completion />
 			<debugger />

@@ -24,7 +24,11 @@
 BOOL resize_array(void **arr, int *capacity, int item_size, int newsize);
 
 
-/** Release a block of memory returned by read_input().
+/** Allocate a block of memory.
+ */
+void *allocate_memory(size_t size);
+
+/** Release a block of memory.
  */
 void free_memory(void *data);
 
