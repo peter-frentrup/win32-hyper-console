@@ -381,9 +381,9 @@ struct console_scrollback_t *console_scrollback_new(void) {
 }
 
 void console_scrollback_free(struct console_scrollback_t *cs) {
-  if(!cs) 
+  if(!cs)
     return;
-  
+    
   clear_lines(&cs->old_lines);
   clear_line_numbers_array(&cs->visible_line_numbers);
   free_memory(cs);
@@ -396,7 +396,7 @@ void console_scrollback_update(struct console_scrollback_t *cs, int known_visibl
   
   if(cs == NULL)
     return;
-  
+    
   if(!GetConsoleScreenBufferInfo(cs->output_handle, &csbi)) {
     return;
   }
@@ -443,17 +443,98 @@ void console_scrollback_update(struct console_scrollback_t *cs, int known_visibl
 }
 
 BOOL console_scollback_local_to_global(struct console_scrollback_t *cs, COORD local, int *line, int *column) {
+  const struct global_coord_t *coords;
+  int vis_y_count;
+  
   assert(line != NULL);
   assert(column != NULL);
   
+  *line = 0;
+  *column = 0;
+  
   if(cs == NULL)
     return FALSE;
+    
+  vis_y_count = cs->visible_line_numbers.count;
   
-  if(local.Y < 0 || local.Y >= cs->visible_line_numbers.count)
+  if(local.Y < 0 || local.Y > vis_y_count)
     return FALSE;
+    
+  if(vis_y_count == 0) {
+    *line = cs->past_lines_count;
+    *column = local.X;
+    return TRUE;
+  }
   
-  *line = cs->visible_line_numbers.line_starts[local.Y].line;
-  *column = local.X + cs->visible_line_numbers.line_starts[local.Y].column;
+  coords = cs->visible_line_numbers.line_starts;
+  
+  if(local.Y == vis_y_count) {
+    *line = coords[vis_y_count - 1].line + 1;
+    *column = local.X;
+    return TRUE;
+  }
+  
+  *line = coords[local.Y].line;
+  *column = local.X + coords[local.Y].column;
   
   return TRUE;
+}
+
+BOOL console_scollback_global_to_local(struct console_scrollback_t *cs, int line, int column, COORD *local) {
+  const struct global_coord_t *coords;
+  int vis_y;
+  int vis_y_count;
+  int next_global_line;
+  
+  assert(local != NULL);
+  assert(column >= 0);
+  
+  local->X = 0;
+  local->Y = 0;
+  
+  if(cs == NULL)
+    return FALSE;
+    
+  vis_y_count = cs->visible_line_numbers.count;
+  
+  if(line < cs->past_lines_count)
+    return FALSE;
+   
+  coords = cs->visible_line_numbers.line_starts;
+   
+  if(vis_y_count > 0) {
+    next_global_line = coords[vis_y_count - 1].line + 1;
+  }
+  else
+    next_global_line = cs->past_lines_count;
+    
+  if(line == next_global_line) {
+    local->Y = vis_y_count;
+    local->X = column;
+    return TRUE;
+  }
+  
+  if(line > next_global_line)
+    return FALSE;
+    
+  for(vis_y = line - cs->past_lines_count; vis_y < vis_y_count; ++vis_y) {
+    if(coords[vis_y].line == line) {
+      int break_column = INT_MAX;
+      
+      if( vis_y + 1 < vis_y_count && coords[vis_y + 1].line == line) {
+        break_column = coords[vis_y + 1].column;
+      }
+      
+      if(column < break_column) {
+        local->Y = vis_y;
+        local->X = column - coords[vis_y].column;
+        return TRUE;
+      }
+    }
+    
+    if(line < coords[vis_y].line)
+      break;
+  }
+  
+  return FALSE;
 }

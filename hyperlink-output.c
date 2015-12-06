@@ -131,7 +131,7 @@ static void free_hyperlink_collection(struct hyperlink_collection_t *hc) {
   
   while(hc->last_link)
     free_link_at(&hc->last_link);
-  
+    
   console_scrollback_free(hc->scrollback);
   
   //free(hc->old_title);
@@ -146,9 +146,9 @@ static void free_hyperlink_collection(struct hyperlink_collection_t *hc) {
    effect otherwise (only until Win10 though).
 
    The assumption here is that 1) these bytes are normally unset and 2) no one else needs them.
-   
+
    BUG: This does not work on Windows 10, because the COMMON_LVB_XXX attributes are used there.
-   
+
    TODO: find another way to store line canary.
  */
 static int get_line_canary(struct hyperlink_collection_t *hc, int buffer_line) {
@@ -372,7 +372,7 @@ static void close_link(struct hyperlink_collection_t *hc) {
   
   assert(hc->num_open_links > 0);
   assert(link != NULL);
-    
+  
   SetConsoleTextAttribute(hc->output_handle, link->attr_previous);
   
   hc->num_open_links--;
@@ -668,11 +668,26 @@ static BOOL write_global_position_to_title(struct hyperlink_collection_t *hc, CO
   int column;
   
   assert(hc != NULL);
-
+  
   if(console_scollback_local_to_global(hc->scrollback, local, &line, &column)) {
     wchar_t buffer[100];
     
-    StringCbPrintfW(buffer, sizeof(buffer), L"at %d:%d", line, column);
+    COORD roundtrip;
+    if( console_scollback_global_to_local(hc->scrollback, line, column, &roundtrip) &&
+        local.X == roundtrip.X &&
+        local.Y == roundtrip.Y)
+    {
+      StringCbPrintfW(buffer, sizeof(buffer), L"at %d:%d", line, column);
+    }
+    else {
+      StringCbPrintfW(
+        buffer, sizeof(buffer), 
+        L"BAD %d:%d gives local %d:%d != %d:%d", 
+        line, column,
+        (int)roundtrip.Y, (int)roundtrip.X,
+        (int)local.Y, (int)local.X);
+    }
+    
     set_console_title(hc, buffer);
     
     return TRUE;
@@ -765,7 +780,7 @@ static void hs_start_input(struct hyperlink_collection_t *hc, int pre_input_line
   
   if(pre_input_lines < 0)
     pre_input_lines = 0;
-  
+    
   console_scrollback_update(hc->scrollback, pre_input_lines);
 }
 
