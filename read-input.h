@@ -14,6 +14,6 @@ BOOL stop_current_input(BOOL do_abort, const wchar_t *opt_replace_input);
   \return The text entered by the user without trailing newline, or NULL on error. 
           The result must be freed with free_memory().
  */
-wchar_t *read_input(BOOL multiline_mode);
+wchar_t *read_input(BOOL multiline_mode, const wchar_t *default_input);
 
 #endif // __CONSOLE__READ_INPUT_H__

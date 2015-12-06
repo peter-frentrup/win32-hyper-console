@@ -1,6 +1,3 @@
-//#define UNICODE
-#define __CRT_STRSAFE_IMPL
-
 #include "hyperlink-output.h"
 #include "read-input.h"
 #include "scroll-counter.h"
@@ -8,7 +5,6 @@
 
 #include <assert.h>
 #include <windows.h>
-#include <strsafe.h>
 
 #define LINE_CANARY_SIZE  3
 
@@ -592,8 +588,7 @@ static void on_mouse_enter_link(struct hyperlink_collection_t *hc) {
   assert(hc != NULL);
   assert(hc->mouse_over_link != NULL);
   
-  if(save_old_console_title(hc))
-    set_console_title(hc, hc->mouse_over_link->title);
+  set_console_title(hc, hc->mouse_over_link->title);
     
   invert_link_colors(hc, hc->mouse_over_link);
 }
@@ -754,6 +749,8 @@ static void hs_start_input(struct hyperlink_collection_t *hc, int console_width,
   hc->pressed_link = NULL;
   
   activate_all_links(hc);
+  
+  save_old_console_title(hc);
 }
 
 static void hs_end_input(struct hyperlink_collection_t *hc) {
@@ -763,6 +760,8 @@ static void hs_end_input(struct hyperlink_collection_t *hc) {
   
   hc->mouse_over_link = NULL;
   hc->pressed_link = NULL;
+  
+  set_console_title(hc, hc->old_title);
 }
 
 static BOOL _have_hyperlink_system = FALSE;

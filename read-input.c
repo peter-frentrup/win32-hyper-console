@@ -1702,7 +1702,7 @@ static wchar_t *read_file(FILE *file, BOOL multiline_mode) {
   return NULL;
 }
 
-wchar_t *read_input(BOOL multiline_mode) {
+wchar_t *read_input(BOOL multiline_mode, const wchar_t *default_input) {
   struct console_input_t con[1];
   struct console_input_t *old_con;
   
@@ -1714,8 +1714,10 @@ wchar_t *read_input(BOOL multiline_mode) {
   con->multiline_mode = multiline_mode;
   init_buffer(con);
   
-  insert_input_text(con, 0, L"default", -1);
-  con->input_anchor = 0;
+  if(default_input) {
+    insert_input_text(con, 0, default_input, -1);
+    con->input_anchor = 0;
+  }
   update_output(con);
   
   old_con = current_input_console;
