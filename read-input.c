@@ -712,7 +712,7 @@ static BOOL scroll_screen_if_needed(struct console_input_t *con) {
     con->input_line_coord_y -= scroll_lines;
     did_scroll = TRUE;
     
-    hyperlink_system_start_input(con->input_line_coord_y);
+    hyperlink_system_start_input(con->console_size.X, con->input_line_coord_y);
   }
   
   cur_pos = get_output_position_from_input_position(con, con->input_pos);
@@ -1582,6 +1582,8 @@ static BOOL input_loop(struct console_input_t *con) {
     return FALSE;
   }
   
+  hyperlink_system_start_input(con->console_size.X, con->input_line_coord_y);
+  
   while(!con->stop && !con->error) {
     INPUT_RECORD input_records[1];
     DWORD num_read;
@@ -1623,6 +1625,8 @@ static BOOL input_loop(struct console_input_t *con) {
   }
   
   finish_input(con);
+  
+  hyperlink_system_end_input();
   
   if(!WriteConsoleA(con->output_handle, "\n", 1, NULL, NULL))
     con->error = "WriteConsoleA";
@@ -1710,8 +1714,6 @@ wchar_t *read_input(BOOL multiline_mode) {
   con->multiline_mode = multiline_mode;
   init_buffer(con);
   
-  hyperlink_system_start_input(con->input_line_coord_y);
-  
   insert_input_text(con, 0, L"default", -1);
   con->input_anchor = 0;
   update_output(con);
@@ -1722,8 +1724,6 @@ wchar_t *read_input(BOOL multiline_mode) {
   input_loop(con);
   
   current_input_console = old_con;
-  
-  hyperlink_system_end_input();
   
   if(con->error) {
     fprintf(stderr, "input failed. ");
