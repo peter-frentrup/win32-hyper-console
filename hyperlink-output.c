@@ -1,9 +1,10 @@
 //#define UNICODE
 #define __CRT_STRSAFE_IMPL
 
-#include "read-input.h"
 #include "hyperlink-output.h"
+#include "read-input.h"
 #include "scroll-counter.h"
+#include "memory-util.h"
 
 #include <assert.h>
 #include <windows.h>
@@ -31,8 +32,6 @@ struct hyperlink_collection_t {
   
   struct console_scrollback_t *scrollback;
   
-  COORD console_size;
-  
   int num_failed_open_links;
   int num_open_links;
   struct hyperlink_t *last_link;
@@ -49,11 +48,6 @@ struct hyperlink_collection_t {
 static void init_hyperlink_collection(struct hyperlink_collection_t *hc);
 static void init_colors(struct hyperlink_collection_t *hc);
 static void free_hyperlink_collection(struct hyperlink_collection_t *hc);
-
-static int get_line_canary(struct hyperlink_collection_t *hc, int line);
-static BOOL put_line_canary(struct hyperlink_collection_t *hc, int buffer_line, int canary);
-static int guess_global_line_number(struct hyperlink_collection_t *hc, COORD pos);
-static BOOL store_global_line_number(struct hyperlink_collection_t *hc, COORD pos, int global_line_number);
 
 static void free_link_at(struct hyperlink_t **last_link);
 static void clean_old_links(struct hyperlink_collection_t *hc, int first_keep_line);
@@ -96,13 +90,9 @@ static void init_hyperlink_collection(struct hyperlink_collection_t *hc) {
   hc->output_handle = GetStdHandle(STD_OUTPUT_HANDLE);
   hc->scrollback = console_scrollback_new();
   
-  hc->console_size.X = 1;
-  hc->console_size.Y = 1;
-  
   hc->attr_default = 0x0F;
   if(GetConsoleScreenBufferInfo(hc->output_handle, &csbi)) {
     hc->attr_default = csbi.wAttributes;
-    hc->console_size = csbi.dwSize;
   }
   
   init_colors(hc);
@@ -134,129 +124,8 @@ static void free_hyperlink_collection(struct hyperlink_collection_t *hc) {
     
   console_scrollback_free(hc->scrollback);
   
-  //free(hc->old_title);
+  //free_memory(hc->old_title);
   memset(hc, 0, sizeof(struct hyperlink_collection_t));
-}
-
-/* To detect buffer scrolling, we store some kind of global line count ("canary") in the
-   character attributes of a line.
-   We therefore misuse the high-order attribute bytes of the first LINE_CANARY_SIZE many characters
-   in a line.
-   These reserved for COMMON_LVB_XXX attributes, which only function with DBCS and seem to have no
-   effect otherwise (only until Win10 though).
-
-   The assumption here is that 1) these bytes are normally unset and 2) no one else needs them.
-
-   BUG: This does not work on Windows 10, because the COMMON_LVB_XXX attributes are used there.
-
-   TODO: find another way to store line canary.
- */
-static int get_line_canary(struct hyperlink_collection_t *hc, int buffer_line) {
-  COORD pos;
-  DWORD num_read;
-  
-  WORD attributes[LINE_CANARY_SIZE] = {0};
-  
-  assert(hc != NULL);
-  assert(buffer_line >= 0);
-  
-  pos.X = 0;
-  pos.Y = buffer_line;
-  num_read = 0;
-  if(ReadConsoleOutputAttribute(hc->output_handle, attributes, LINE_CANARY_SIZE, pos, &num_read)) {
-    WORD *att;
-    int canary = 0;
-    
-    for(att = attributes; att != attributes + LINE_CANARY_SIZE; ++att) {
-      canary = (canary << 8) | HIBYTE(*att);
-    }
-    
-    return canary;
-  }
-  
-  return 0;
-}
-
-static BOOL put_line_canary(struct hyperlink_collection_t *hc, int buffer_line, int canary) {
-  COORD pos;
-  DWORD num_valid;
-  WORD attributes[LINE_CANARY_SIZE] = {0};
-  
-  assert(hc != NULL);
-  assert(buffer_line >= 0);
-  
-  pos.X = 0;
-  pos.Y = buffer_line;
-  num_valid = 0;
-  if(ReadConsoleOutputAttribute(hc->output_handle, attributes, LINE_CANARY_SIZE, pos, &num_valid)) {
-    WORD *att = attributes + LINE_CANARY_SIZE;
-    
-    while(att != attributes) {
-      --att;
-      
-      *att = LOBYTE(*att) | ((canary & 0xFF) << 8);
-      canary = canary >> 8;
-    }
-    
-    if(WriteConsoleOutputAttribute(hc->output_handle, attributes, LINE_CANARY_SIZE, pos, &num_valid)) {
-      return TRUE;
-    }
-  }
-  
-  return FALSE;
-}
-
-static int guess_global_line_number(struct hyperlink_collection_t *hc, COORD pos) {
-  int canary;
-  int test_line_offset;
-  
-  assert(hc != NULL);
-  
-  if(pos.Y < 0)
-    return 0;
-    
-  canary = 0;
-  test_line_offset = 0;
-  if(pos.X >= LINE_CANARY_SIZE)
-    canary = get_line_canary(hc, pos.Y);
-    
-  while(test_line_offset < pos.Y && !canary) {
-    ++test_line_offset;
-    canary = get_line_canary(hc, pos.Y - test_line_offset);
-  }
-  
-  if(canary <= 0) {
-    if(hc->last_link)
-      return hc->last_link->end_global_line + 1 + test_line_offset;
-      
-    return 1 + test_line_offset;
-  }
-  
-  return canary + test_line_offset;
-}
-
-static BOOL store_global_line_number(struct hyperlink_collection_t *hc, COORD pos, int global_line_number) {
-  assert(hc != NULL);
-  
-  if(pos.Y < 0)
-    return FALSE;
-    
-  if(global_line_number <= pos.Y)
-    return FALSE;
-    
-  if(pos.X >= LINE_CANARY_SIZE) {
-    if(put_line_canary(hc, pos.Y, global_line_number))
-      return TRUE;
-  }
-  
-  while(pos.Y > 0) {
-    --pos.Y;
-    --global_line_number;
-    if(put_line_canary(hc, pos.Y, global_line_number))
-      return TRUE;
-  }
-  
-  return FALSE;
 }
 
 static void free_link_at(struct hyperlink_t **last_link) {
@@ -270,9 +139,9 @@ static void free_link_at(struct hyperlink_t **last_link) {
     
   *last_link = link->prev_link;
   
-  free(link->title);
-  free(link->input_text);
-  free(link);
+  free_memory(link->title);
+  free_memory(link->input_text);
+  free_memory(link);
 }
 
 static void clean_old_links(struct hyperlink_collection_t *hc, int first_keep_line) {
@@ -310,7 +179,11 @@ static void clean_old_links(struct hyperlink_collection_t *hc, int first_keep_li
 static struct hyperlink_t *open_new_link(struct hyperlink_collection_t *hc) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   struct hyperlink_t *link;
-  int global_line;
+  COORD top;
+  int top_line;
+  int top_column;
+  int line;
+  int column;
   
   assert(hc != NULL);
   
@@ -324,20 +197,33 @@ static struct hyperlink_t *open_new_link(struct hyperlink_collection_t *hc) {
     return NULL;
   }
   
-  global_line = guess_global_line_number(hc, csbi.dwCursorPosition);
-  if(global_line < 0) {
+  console_scrollback_update(hc->scrollback, csbi.dwCursorPosition.Y);
+  
+  top.X = 0;
+  top.Y = 0;
+  if(!console_scollback_local_to_global(hc->scrollback, top, &top_line, &top_column)
+      || !console_scollback_local_to_global(hc->scrollback, csbi.dwCursorPosition, &line, &column))
+  {
     hc->num_failed_open_links++;
     return NULL;
   }
   
-  clean_old_links(hc, global_line - csbi.dwCursorPosition.Y);
+  clean_old_links(hc, top_line);
   
-  if(!store_global_line_number(hc, csbi.dwCursorPosition, global_line)) {
-    hc->num_failed_open_links++;
-    return NULL;
-  }
+  //global_line = guess_global_line_number(hc, csbi.dwCursorPosition);
+  //if(global_line < 0) {
+  //  hc->num_failed_open_links++;
+  //  return NULL;
+  //}
+  //
+  //clean_old_links(hc, global_line - csbi.dwCursorPosition.Y);
+  //
+  //if(!store_global_line_number(hc, csbi.dwCursorPosition, global_line)) {
+  //  hc->num_failed_open_links++;
+  //  return NULL;
+  //}
   
-  link = malloc(sizeof(struct hyperlink_t));
+  link = allocate_memory(sizeof(struct hyperlink_t));
   if(!link) {
     hc->num_failed_open_links++;
     return NULL;
@@ -345,8 +231,10 @@ static struct hyperlink_t *open_new_link(struct hyperlink_collection_t *hc) {
   
   memset(link, 0, sizeof(struct hyperlink_t));
   
-  link->start_column      = link->end_column      = csbi.dwCursorPosition.X;
-  link->start_global_line = link->end_global_line = global_line;
+  link->start_column      = link->end_column      = column;
+  link->start_global_line = link->end_global_line = line;
+  //link->start_column      = link->end_column      = csbi.dwCursorPosition.X;
+  //link->start_global_line = link->end_global_line = global_line;
   
   link->attr_previous = csbi.wAttributes;
   SetConsoleTextAttribute(hc->output_handle, hc->attr_link);
@@ -360,6 +248,8 @@ static struct hyperlink_t *open_new_link(struct hyperlink_collection_t *hc) {
 static void close_link(struct hyperlink_collection_t *hc) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   struct hyperlink_t *link;
+  int line;
+  int column;
   
   assert(hc != NULL);
   
@@ -376,20 +266,29 @@ static void close_link(struct hyperlink_collection_t *hc) {
   SetConsoleTextAttribute(hc->output_handle, link->attr_previous);
   
   hc->num_open_links--;
-  if(GetConsoleScreenBufferInfo(hc->output_handle, &csbi)) {
-    int global_line = guess_global_line_number(hc, csbi.dwCursorPosition);
-    
-    if(global_line < link->start_global_line)
-      return;
-      
-    if(global_line == link->start_global_line && csbi.dwCursorPosition.X < link->start_column)
-      return;
-      
-    store_global_line_number(hc, csbi.dwCursorPosition, global_line);
-    
-    link->end_global_line = global_line;
-    link->end_column = csbi.dwCursorPosition.X;
-  }
+  if(!GetConsoleScreenBufferInfo(hc->output_handle, &csbi))
+    return;
+  
+  console_scrollback_update(hc->scrollback, csbi.dwCursorPosition.Y);
+  
+  if(!console_scollback_local_to_global(hc->scrollback, csbi.dwCursorPosition, &line, &column))
+    return;
+  
+  link->end_global_line = line;
+  link->end_column      = column;
+  
+  //int global_line = guess_global_line_number(hc, csbi.dwCursorPosition);
+  //
+  //if(global_line < link->start_global_line)
+  //  return;
+  //
+  //if(global_line == link->start_global_line && csbi.dwCursorPosition.X < link->start_column)
+  //  return;
+  //
+  //store_global_line_number(hc, csbi.dwCursorPosition, global_line);
+  //
+  //link->end_global_line = global_line;
+  //link->end_column = csbi.dwCursorPosition.X;
 }
 
 static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t *title, int title_length) {
@@ -412,9 +311,9 @@ static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t
   assert(hc->num_open_links > 0);
   assert(link != NULL);
   
-  free(link->title);
+  free_memory(link->title);
   if(title) {
-    link->title = malloc((title_length + 1) * sizeof(wchar_t));
+    link->title = allocate_memory((title_length + 1) * sizeof(wchar_t));
     if(link->title) {
       memcpy(
           link->title,
@@ -448,9 +347,9 @@ static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wc
   assert(hc->num_open_links > 0);
   assert(link != NULL);
   
-  free(link->input_text);
+  free_memory(link->input_text);
   if(text) {
-    link->input_text = malloc((text_length + 1) * sizeof(wchar_t));
+    link->input_text = allocate_memory((text_length + 1) * sizeof(wchar_t));
     if(link->input_text) {
       memcpy(
           link->input_text,
@@ -469,21 +368,6 @@ static BOOL save_old_console_title(struct hyperlink_collection_t *hc) {
   
   assert(hc != NULL);
   
-  //free(hc->old_title);
-  //hc->old_title = NULL;
-  //
-  //length = GetConsoleTitleW(NULL, 0);
-  //if(length < 0)
-  //  return FALSE;
-  //
-  //hc->old_title = malloc((length + 1) * sizeof(wchar_t));
-  //if(!hc->old_title)
-  //  return FALSE;
-  //
-  //hc->old_title[0] = L'\0';
-  //GetConsoleTitleW(hc->old_title, length);
-  //return TRUE;
-  
   GetConsoleTitleW(hc->old_title, ARRAYSIZE(hc->old_title));
   return TRUE;
 }
@@ -496,10 +380,9 @@ static void set_console_title(struct hyperlink_collection_t *hc, const wchar_t *
 }
 
 static BOOL invert_link_colors(struct hyperlink_collection_t *hc, const struct hyperlink_t *link) {
+  COORD start;
+  COORD end;
   CONSOLE_SCREEN_BUFFER_INFO csbi;
-  
-  int top_global_line;
-  COORD pos;
   DWORD length;
   WORD *attributes;
   DWORD num_valid;
@@ -509,47 +392,53 @@ static BOOL invert_link_colors(struct hyperlink_collection_t *hc, const struct h
   
   if(!GetConsoleScreenBufferInfo(hc->output_handle, &csbi))
     return FALSE;
-    
-  pos = csbi.dwCursorPosition;
-  top_global_line = guess_global_line_number(hc, pos);
-  if(top_global_line <= 0)
+  
+  if(!console_scollback_global_to_local(hc->scrollback, link->start_global_line, link->start_column, &start) ||
+     !console_scollback_global_to_local(hc->scrollback, link->end_global_line,   link->end_column,   &end))
+  {
     return FALSE;
-    
-  top_global_line -= pos.Y;
-  
-  length = (1 + link->end_global_line - link->start_global_line) * hc->console_size.X;
-  length -= link->start_column;
-  length -= hc->console_size.X - link->end_column;
-  
-  pos.X = link->start_column;
-  pos.Y = link->start_global_line - top_global_line;
-  
-  if(pos.Y < 0) {
-    length += link->start_column;
-    length += pos.Y * hc->console_size.X;
-    
-    pos.X = 0;
-    pos.Y = 0;
   }
   
-  if(length <= 0)
+  if(start.X >= csbi.dwSize.X) {
+    start.X = 0;
+    start.Y+= 1;
+  }
+  
+  if(end.X >= csbi.dwSize.X) {
+    end.X = 0;
+    end.Y+= 1;
+  }
+  
+  if(start.Y < 0) {
+    start.X = 0;
+    start.Y = 0;
+  }
+  
+  length = (1 + end.Y - start.Y) * csbi.dwSize.X;
+  length -= start.X;
+  length -= csbi.dwSize.X - end.X;
+  
+  if(length < 0)
     return FALSE;
-    
-  attributes = malloc(length * sizeof(WORD));
+  
+  attributes = allocate_memory(length * sizeof(WORD));
   if(attributes == NULL)
     return FALSE;
     
-  if(ReadConsoleOutputAttribute(hc->output_handle, attributes, length, pos, &num_valid)) {
+  if(ReadConsoleOutputAttribute(hc->output_handle, attributes, length, start, &num_valid)) {
     WORD *att;
     
     for(att = attributes; att != attributes + length; ++att) {
       *att = (*att & 0xFF00) | ((*att & 0x00F0) >> 4) | ((*att & 0x000F) << 4);
     }
     
-    if(WriteConsoleOutputAttribute(hc->output_handle, attributes, length, pos, &num_valid))
+    if(WriteConsoleOutputAttribute(hc->output_handle, attributes, length, start, &num_valid)) {
+      free_memory(attributes);
       return TRUE;
+    }
   }
   
+  free_memory(attributes);
   return FALSE;
 }
 
@@ -564,21 +453,19 @@ static BOOL is_global_position_before(int a_line, int a_col, int b_line, int b_c
 }
 
 static struct hyperlink_t *find_link(struct hyperlink_collection_t *hc, COORD pos) {
-  int global_line;
+  int line;
+  int column;
   struct hyperlink_t *link;
   
-  assert(hc != NULL);
-  
-  global_line = guess_global_line_number(hc, pos);
-  if(global_line <= 0)
-    return NULL;
+  if(!console_scollback_local_to_global(hc->scrollback, pos, &line, &column))
+    return FALSE;
     
   for(link = hc->last_link; link != NULL; link = link->prev_link) {
     BOOL start_ok;
     BOOL end_ok;
     
-    start_ok = is_global_position_before(link->start_global_line, link->start_column, global_line, pos.X);
-    end_ok = !is_global_position_before(link->end_global_line, link->end_column, global_line, pos.X);
+    start_ok = is_global_position_before(link->start_global_line, link->start_column, line, column);
+    end_ok = !is_global_position_before(link->end_global_line, link->end_column, line, column);
     
     if(start_ok && end_ok)
       return link;
@@ -663,46 +550,9 @@ static BOOL hs_handle_mouse_up(struct hyperlink_collection_t *hc, const MOUSE_EV
   return FALSE;
 }
 
-static BOOL write_global_position_to_title(struct hyperlink_collection_t *hc, COORD local) {
-  int line;
-  int column;
-  
-  assert(hc != NULL);
-  
-  if(console_scollback_local_to_global(hc->scrollback, local, &line, &column)) {
-    wchar_t buffer[100];
-    
-    COORD roundtrip;
-    if( console_scollback_global_to_local(hc->scrollback, line, column, &roundtrip) &&
-        local.X == roundtrip.X &&
-        local.Y == roundtrip.Y)
-    {
-      StringCbPrintfW(buffer, sizeof(buffer), L"at %d:%d", line, column);
-    }
-    else {
-      StringCbPrintfW(
-        buffer, sizeof(buffer), 
-        L"BAD %d:%d gives local %d:%d != %d:%d", 
-        line, column,
-        (int)roundtrip.Y, (int)roundtrip.X,
-        (int)local.Y, (int)local.X);
-    }
-    
-    set_console_title(hc, buffer);
-    
-    return TRUE;
-  }
-  
-  set_console_title(hc, L"no known global position");
-  
-  return FALSE;
-}
-
 static BOOL hs_handle_mouse_move(struct hyperlink_collection_t *hc, const MOUSE_EVENT_RECORD *er) {
   assert(hc != NULL);
   assert(er != NULL);
-  
-  write_global_position_to_title(hc, er->dwMousePosition);
   
   if(er->dwButtonState == 0) {
     return set_mouse_over_link(hc, find_link(hc, er->dwMousePosition));
