@@ -1,5 +1,3 @@
-#define __CRT_STRSAFE_IMPL
-
 #include "read-input.h"
 #include "memory-util.h"
 #include "hyperlink-output.h"

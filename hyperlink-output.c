@@ -85,7 +85,6 @@ static BOOL hs_handle_focus_event(struct hyperlink_collection_t *hc, const FOCUS
 static void hs_start_input(struct hyperlink_collection_t *hc, int console_width, int pre_input_lines);
 static void hs_end_input(struct hyperlink_collection_t *hc);
 
-
 static void init_hyperlink_collection(struct hyperlink_collection_t *hc) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   
@@ -209,8 +208,8 @@ static struct hyperlink_t *open_new_link(struct hyperlink_collection_t *hc) {
   
   top.X = 0;
   top.Y = 0;
-  if(!console_scollback_local_to_global(hc->scrollback, top, &top_line, &top_column)
-      || !console_scollback_local_to_global(hc->scrollback, csbi.dwCursorPosition, &line, &column))
+  if( !console_scollback_local_to_global(hc->scrollback, top, &top_line, &top_column) ||
+      !console_scollback_local_to_global(hc->scrollback, csbi.dwCursorPosition, &line, &column))
   {
     hc->num_failed_open_links++;
     return NULL;
@@ -296,9 +295,9 @@ static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t
     link->title = allocate_memory((title_length + 1) * sizeof(wchar_t));
     if(link->title) {
       memcpy(
-          link->title,
-          title,
-          title_length * sizeof(wchar_t));
+        link->title,
+        title,
+        title_length * sizeof(wchar_t));
       link->title[title_length] = L'\0';
     }
   }
@@ -332,9 +331,9 @@ static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wc
     link->input_text = allocate_memory((text_length + 1) * sizeof(wchar_t));
     if(link->input_text) {
       memcpy(
-          link->input_text,
-          text,
-          text_length * sizeof(wchar_t));
+        link->input_text,
+        text,
+        text_length * sizeof(wchar_t));
       link->input_text[text_length] = L'\0';
     }
   }
@@ -385,9 +384,9 @@ static struct hyperlink_t *find_link(struct hyperlink_collection_t *hc, COORD po
   @return The screen-buffer length of the link. Non-positive on error.
  */
 static int find_link_visual_position(
-    struct hyperlink_collection_t  *hc,
-    const struct hyperlink_t       *link,
-    COORD                          *position
+  struct hyperlink_collection_t  *hc,
+  const struct hyperlink_t       *link,
+  COORD                          *position
 ) {
   COORD start;
   COORD end;
@@ -589,7 +588,7 @@ static void on_mouse_enter_link(struct hyperlink_collection_t *hc) {
   assert(hc->mouse_over_link != NULL);
   
   set_console_title(hc, hc->mouse_over_link->title);
-    
+  
   invert_link_colors(hc, hc->mouse_over_link);
 }
 

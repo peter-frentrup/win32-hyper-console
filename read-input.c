@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strsafe.h>
 
 
 #ifndef MOUSE_HWHEELED
@@ -112,6 +113,7 @@ static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RE
 static void handle_window_buffer_size_event(struct console_input_t *con, const WINDOW_BUFFER_SIZE_RECORD *er);
 static void handle_focus_event(struct console_input_t *con, const FOCUS_EVENT_RECORD *er);
 static void handle_menu_event(struct console_input_t *con, const MENU_EVENT_RECORD *er);
+static void handle_unknown_event(struct console_input_t *con, const INPUT_RECORD *ir);
 
 static void finish_input(struct console_input_t *con);
 static BOOL input_loop(struct console_input_t *con);
@@ -1538,7 +1540,17 @@ static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RE
 }
 
 static void handle_window_buffer_size_event(struct console_input_t *con, const WINDOW_BUFFER_SIZE_RECORD *er) {
-
+  wchar_t buffer[100];
+  
+  assert(con != NULL);
+  assert(er != NULL);
+  
+  StringCbPrintfW(buffer, sizeof(buffer), 
+    L"WINDOW_BUFFER_SIZE_EVENT (%d, %d)\n", 
+    (int)er->dwSize.X,
+    (int)er->dwSize.Y);
+  
+  OutputDebugStringW(buffer);
 }
 
 static void handle_focus_event(struct console_input_t *con, const FOCUS_EVENT_RECORD *er) {
@@ -1552,6 +1564,17 @@ static void handle_focus_event(struct console_input_t *con, const FOCUS_EVENT_RE
 
 static void handle_menu_event(struct console_input_t *con, const MENU_EVENT_RECORD *er) {
 
+}
+
+static void handle_unknown_event(struct console_input_t *con, const INPUT_RECORD *ir) {
+  wchar_t buffer[100];
+  
+  assert(con != NULL);
+  assert(ir != NULL);
+  
+  StringCbPrintfW(buffer, sizeof(buffer), L"Unknown INPUT_RECORD %d\n", (int)ir->EventType);
+  
+  OutputDebugStringW(buffer);
 }
 
 static void finish_input(struct console_input_t *con) {
@@ -1619,6 +1642,10 @@ static BOOL input_loop(struct console_input_t *con) {
           
         case MENU_EVENT:   // disregard menu events
           handle_menu_event(con, &input_records[i].Event.MenuEvent);
+          break;
+          
+        default:
+          handle_unknown_event(con, &input_records[i]);
           break;
       }
     }
