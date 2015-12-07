@@ -222,15 +222,20 @@ static BOOL read_prompt(struct console_input_t *con, int length) {
   if(con->error)
     return FALSE;
     
-  free_memory(con->prompt);
-  con->prompt = NULL;
-  con->prompt_size = 0;
+  if(length != con->prompt_size) {
+    free_memory(con->prompt);
+    con->prompt = NULL;
+    con->prompt_size = 0;
+    
+    if(length > 0) {
+      con->prompt_size = length;
+      con->prompt = allocate_memory(sizeof(con->prompt[0]) * con->prompt_size);
+    }
+  }
   
   if(length <= 0)
     return TRUE;
     
-  con->prompt_size = length;
-  con->prompt = allocate_memory(sizeof(con->prompt[0]) * con->prompt_size);
   if(!con->prompt) {
     con->prompt_size = 0;
     con->error = "allocate_memory";
@@ -1624,9 +1629,9 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
   con->console_size = csbi.dwSize;
   
   /* TODO: Recalculate input_line_coord_y.
-     On Windows 10, when the console width is increased, line breaks disappear and the cursor position 
-     (end of current input line) moves backards/upwards. 
-     Hovever, when the console width is decreased (again), the cursor position (end of current input line) 
+     On Windows 10, when the console width is increased, line breaks disappear and the cursor position
+     (end of current input line) moves backards/upwards.
+     Hovever, when the console width is decreased (again), the cursor position (end of current input line)
      will not move downwards again. So input_line_coord_y will only ever move upwards.
    */
   
@@ -1688,6 +1693,9 @@ static BOOL input_loop(struct console_input_t *con) {
   }
   
   hyperlink_system_start_input(con->console_size.X, con->input_line_coord_y);
+  
+  // There might be some links in the prompt, which just changed their color.
+  read_prompt(con, con->prompt_size);
   
   while(!con->stop && !con->error) {
     INPUT_RECORD input_records[1];
