@@ -1,4 +1,5 @@
 #include "scroll-counter.h"
+#include "console-buffer-io.h"
 #include "memory-util.h"
 
 #include <assert.h>
@@ -425,7 +426,7 @@ void console_scrollback_update(struct console_scrollback_t *cs, int known_visibl
     pos.X = 0;
     pos.Y = 0;
     num_read = 0;
-    if(ReadConsoleOutputCharacterW(
+    if(console_read_output_character(
         cs->output_handle,
         visible_lines,
         visible_size.X * visible_size.Y,

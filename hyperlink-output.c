@@ -1,4 +1,5 @@
 #include "hyperlink-output.h"
+#include "console-buffer-io.h"
 #include "read-input.h"
 #include "scroll-counter.h"
 #include "memory-util.h"
@@ -295,9 +296,9 @@ static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t
     link->title = allocate_memory((title_length + 1) * sizeof(wchar_t));
     if(link->title) {
       memcpy(
-        link->title,
-        title,
-        title_length * sizeof(wchar_t));
+          link->title,
+          title,
+          title_length * sizeof(wchar_t));
       link->title[title_length] = L'\0';
     }
   }
@@ -331,9 +332,9 @@ static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wc
     link->input_text = allocate_memory((text_length + 1) * sizeof(wchar_t));
     if(link->input_text) {
       memcpy(
-        link->input_text,
-        text,
-        text_length * sizeof(wchar_t));
+          link->input_text,
+          text,
+          text_length * sizeof(wchar_t));
       link->input_text[text_length] = L'\0';
     }
   }
@@ -384,9 +385,9 @@ static struct hyperlink_t *find_link(struct hyperlink_collection_t *hc, COORD po
   @return The screen-buffer length of the link. Non-positive on error.
  */
 static int find_link_visual_position(
-  struct hyperlink_collection_t  *hc,
-  const struct hyperlink_t       *link,
-  COORD                          *position
+    struct hyperlink_collection_t  *hc,
+    const struct hyperlink_t       *link,
+    COORD                          *position
 ) {
   COORD start;
   COORD end;
@@ -461,7 +462,7 @@ static BOOL invert_link_colors(struct hyperlink_collection_t *hc, const struct h
   if(attributes == NULL)
     return FALSE;
     
-  if(ReadConsoleOutputAttribute(hc->output_handle, attributes, length, start, &num_valid)) {
+  if(console_read_output_attribute(hc->output_handle, attributes, length, start, &num_valid)) {
     WORD *att;
     
     for(att = attributes; att != attributes + length; ++att) {
@@ -498,7 +499,7 @@ static BOOL activate_link(struct hyperlink_collection_t *hc, struct hyperlink_t 
   if(link->inactive_attributes == NULL)
     return TRUE;
     
-  if(ReadConsoleOutputAttribute(hc->output_handle, link->inactive_attributes, length, start, &num_valid)) {
+  if(console_read_output_attribute(hc->output_handle, link->inactive_attributes, length, start, &num_valid)) {
     link->inactive_attribute_count = length;
     
     new_attributes = allocate_memory(length * sizeof(WORD));
