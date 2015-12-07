@@ -81,7 +81,7 @@ static BOOL write_output_buffer_lines(struct console_input_t *con);
 static BOOL set_output_cursor_position(struct console_input_t *con);
 
 static BOOL resize_input_text(struct console_input_t *con, int length);
-static BOOL insert_input_text(struct console_input_t *con, int pos,const  wchar_t *str, int length);
+static BOOL insert_input_text(struct console_input_t *con, int pos, const  wchar_t *str, int length);
 static BOOL insert_input_char(struct console_input_t *con, int pos, wchar_t ch);
 static BOOL delete_input_text(struct console_input_t *con, int pos, int length);
 
@@ -1046,7 +1046,7 @@ static void move_left(struct console_input_t *con, BOOL fix_anchor, BOOL jump_wo
   new_pos = con->input_pos;
   if (new_pos > 0)
     new_pos--;
-  
+    
   if(jump_word)
     new_pos = get_word_start(con, new_pos);
     
@@ -1289,6 +1289,50 @@ static void paste_from_clipboard(struct console_input_t *con) {
   CloseClipboard();
 }
 
+static void change_console_size(struct console_input_t *con, int delta_columns) {
+  CONSOLE_SCREEN_BUFFER_INFOEX csbiex;
+  SMALL_RECT rect;
+  
+  memset(&csbiex, 0, sizeof(csbiex));
+  csbiex.cbSize = sizeof(csbiex);
+  
+  if(!GetConsoleScreenBufferInfoEx(con->output_handle, &csbiex)) 
+    return;
+  
+  rect = csbiex.srWindow;
+  csbiex.dwSize.X += delta_columns;
+  csbiex.srWindow.Left = 0;
+  csbiex.srWindow.Right = csbiex.dwSize.X;
+  
+  if(!SetConsoleScreenBufferInfoEx(con->output_handle, &csbiex)) {
+    wchar_t buffer[100];
+    StringCbPrintfW(buffer, sizeof(buffer), L"SetConsoleScreenBufferInfoEx failed: %d", (unsigned)GetLastError() );
+    
+    OutputDebugStringW(buffer); 
+  }
+  
+  // I have no idea why this is necessary, but otherwise, the console keeps shrinking.
+  csbiex.srWindow.Bottom = rect.Bottom + 1;
+  if(!SetConsoleScreenBufferInfoEx(con->output_handle, &csbiex)) {
+    wchar_t buffer[100];
+    StringCbPrintfW(buffer, sizeof(buffer), L"2 SetConsoleScreenBufferInfoEx failed: %d", (unsigned)GetLastError() );
+    
+    OutputDebugStringW(buffer); 
+  }
+  
+  
+//  rect.Left = 0;
+//  rect.Top = 0;
+//  rect.Bottom = csbiex.dwSize.Y;
+//  rect.Right = csbiex.dwSize.X;
+//  if(!SetConsoleWindowInfo(con->output_handle, FALSE, &rect)) {
+//    wchar_t buffer[100];
+//    StringCbPrintfW(buffer, sizeof(buffer), L"SetConsoleWindowInfo failed: %d", (unsigned)GetLastError() );
+//    
+//    OutputDebugStringW(buffer); 
+//  }
+}
+
 static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er) {
   assert(con != NULL);
   
@@ -1415,6 +1459,22 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
       insert_input_char(con, con->input_pos, L'\t');
       update_output(con);
       return;
+      
+    case VK_OEM_MINUS:
+      if( (er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) &&
+          (er->dwControlKeyState & SHIFT_PRESSED) )
+      {
+        change_console_size(con, -1);
+      }
+      break;
+      
+    case VK_OEM_PLUS:
+      if( (er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) &&
+          (er->dwControlKeyState & SHIFT_PRESSED) )
+      {
+        change_console_size(con, +1);
+      }
+      break;
   }
   
   if((unsigned)er->uChar.UnicodeChar >= (unsigned)L' ') {
@@ -1545,11 +1605,11 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
   assert(con != NULL);
   assert(er != NULL);
   
-  StringCbPrintfW(buffer, sizeof(buffer), 
-    L"WINDOW_BUFFER_SIZE_EVENT (%d, %d)\n", 
-    (int)er->dwSize.X,
-    (int)er->dwSize.Y);
-  
+  StringCbPrintfW(buffer, sizeof(buffer),
+      L"WINDOW_BUFFER_SIZE_EVENT (%d, %d)\n",
+      (int)er->dwSize.X,
+      (int)er->dwSize.Y);
+      
   OutputDebugStringW(buffer);
 }
 
@@ -1702,29 +1762,29 @@ static wchar_t *read_file(FILE *file, BOOL multiline_mode) {
   while(fgetws(buffer, ARRAYSIZE(buffer), file)) {
     int len = wcslen(buffer);
     
-    if(len <= 0) 
+    if(len <= 0)
       return str;
-    
-    if(!resize_array((void**)&str, &str_capacity, sizeof(wchar_t), str_len + len)) 
+      
+    if(!resize_array((void**)&str, &str_capacity, sizeof(wchar_t), str_len + len))
       break;
-    
+      
     memcpy(str + str_len, buffer, len * sizeof(wchar_t));
-    str_len+= len;
+    str_len += len;
     
-    if(str[str_len-1] == L'\n') {
+    if(str[str_len - 1] == L'\n') {
       if(multiline_mode) {
-        if(str_len > 1 && str[str_len-2] == L'\n') {
-          str[str_len-2] = L'\0';
+        if(str_len > 1 && str[str_len - 2] == L'\n') {
+          str[str_len - 2] = L'\0';
           return str;
         }
       }
       else {
-        str[str_len-1] = L'\0';
+        str[str_len - 1] = L'\0';
         return str;
       }
     }
   }
-
+  
   free_memory(str);
   return NULL;
 }
@@ -1737,7 +1797,7 @@ wchar_t *read_input(BOOL multiline_mode, const wchar_t *default_input) {
     fflush(stdout);
     return read_file(stdin, multiline_mode);
   }
-    
+  
   con->multiline_mode = multiline_mode;
   init_buffer(con);
   
