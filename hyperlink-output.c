@@ -5,6 +5,7 @@
 #include "memory-util.h"
 
 #include <assert.h>
+#include <stdio.h>
 #include <windows.h>
 
 #define LINE_CANARY_SIZE  3
@@ -85,6 +86,8 @@ static BOOL hs_handle_focus_event(struct hyperlink_collection_t *hc, const FOCUS
 
 static void hs_start_input(struct hyperlink_collection_t *hc, int console_width, int pre_input_lines);
 static void hs_end_input(struct hyperlink_collection_t *hc);
+
+static void hs_print_debug_info(struct hyperlink_collection_t *hc);
 
 static void init_hyperlink_collection(struct hyperlink_collection_t *hc) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -764,6 +767,64 @@ static void hs_end_input(struct hyperlink_collection_t *hc) {
   set_console_title(hc, hc->old_title);
 }
 
+
+static void hs_print_debug_info(struct hyperlink_collection_t *hc) {
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  COORD pos;
+  int link_count;
+  
+  assert(hc != NULL);
+  
+  if(!GetConsoleScreenBufferInfo(hc->output_handle, &csbi)) {
+    fprintf(stderr, "GetConsoleScreenBufferInfo failed\n");
+    return;
+  }
+  
+  struct hyperlink_t *link = hc->last_link;
+  while(link) {
+    ++link_count;
+    link = link->prev_link;
+  }
+  
+  fprintf(stderr, "Number of hyperlinks: %d\n",
+      link_count);
+  
+  fprintf(stderr, "Screen buffer %d lines x %d columns\n",
+      (int)csbi.dwSize.Y, 
+      (int)csbi.dwSize.X);
+  fprintf(stderr, "Window at %d:%d size %d lines x %d columns\n",
+      (int)csbi.srWindow.Top, 
+      (int)csbi.srWindow.Left,
+      (int)csbi.srWindow.Bottom - csbi.srWindow.Top,
+      (int)csbi.srWindow.Right - csbi.srWindow.Left);
+  fprintf(stderr, "Cursor at %d:%d\n",
+      (int)csbi.dwCursorPosition.Y,
+      (int)csbi.dwCursorPosition.X);
+  
+  pos = csbi.dwCursorPosition;
+  pos.X = 0;
+  while(pos.Y >= 0) {
+    int line;
+    int column;
+    
+    if(console_scollback_local_to_global(hc->scrollback, pos, &line, &column)) {
+      fprintf(stderr, "Last known global position is %d:%d (local %d:%d)\n",
+          line,
+          column,
+          (int)pos.Y,
+          (int)pos.X);
+      break;
+    }
+    
+    --pos.Y;
+  }
+  
+  if(pos.Y < 0) {
+    fprintf(stderr, "No known global position\n");
+  }
+}
+
+
 static BOOL _have_hyperlink_system = FALSE;
 struct hyperlink_collection_t _global_links[1];
 static CRITICAL_SECTION _cs_global_links[1];
@@ -862,6 +923,17 @@ void hyperlink_system_end_input(void) {
   EnterCriticalSection(_cs_global_links);
   
   hs_end_input(_global_links);
+  
+  LeaveCriticalSection(_cs_global_links);
+}
+
+void hyperlink_system_print_debug_info(void) {
+  if(!_have_hyperlink_system)
+    return;
+    
+  EnterCriticalSection(_cs_global_links);
+  
+  hs_print_debug_info(_global_links);
   
   LeaveCriticalSection(_cs_global_links);
 }

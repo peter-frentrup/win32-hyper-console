@@ -255,6 +255,11 @@ int main() {
       continue;
     }
     
+    if(first_word_equals(str, L"debug")) {
+      hyperlink_system_print_debug_info();
+      continue;
+    }
+    
     if(wcscmp(str, L"help") == 0) {
       printf("The available options are '");
       write_simple_link(L"print working directory path", L"pwd", L"pwd");
