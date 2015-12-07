@@ -29,6 +29,8 @@ struct console_input_t {
   int input_pos;
   int input_anchor;
   
+  COORD last_cursor_pos;
+  
   int *input_to_output_positions; // [input_length + 1]
   int input_to_output_capacity;
   
@@ -828,6 +830,7 @@ static BOOL set_output_cursor_position(struct console_input_t *con) {
   pos.X = output_pos % console_width;
   pos.Y = output_pos / console_width + con->input_line_coord_y;
   
+  con->last_cursor_pos = pos;
   if(!SetConsoleCursorPosition(con->output_handle, pos)) {
     //  con->error = "SetConsoleCursorPosition";
     //  return 0;
@@ -1610,17 +1613,6 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
   assert(con != NULL);
   assert(er != NULL);
   
-  {
-    wchar_t buffer[100];
-    
-    StringCbPrintfW(buffer, sizeof(buffer),
-        L"WINDOW_BUFFER_SIZE_EVENT (%d, %d)\n",
-        (int)er->dwSize.X,
-        (int)er->dwSize.Y);
-        
-    OutputDebugStringW(buffer);
-  }
-  
   if(!GetConsoleScreenBufferInfo(con->output_handle, &csbi)) {
     con->error = "GetConsoleScreenBufferInfo";
     return;
@@ -1628,12 +1620,51 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
   
   con->console_size = csbi.dwSize;
   
-  /* TODO: Recalculate input_line_coord_y.
-     On Windows 10, when the console width is increased, line breaks disappear and the cursor position
-     (end of current input line) moves backards/upwards.
-     Hovever, when the console width is decreased (again), the cursor position (end of current input line)
-     will not move downwards again. So input_line_coord_y will only ever move upwards.
-   */
+  if(  csbi.dwCursorPosition.Y < con->last_cursor_pos.Y ||
+      (csbi.dwCursorPosition.Y == con->last_cursor_pos.Y && con->last_cursor_pos.X < con->last_cursor_pos.X))
+  {
+    /* The cursor was moved *backwards* by the resize, which does not happen in non-wrapping consoles.
+       So we have to recalculate input_line_coord_y
+    
+       On Windows 10, when the console width is increased, line breaks disappear and the cursor position
+       (end of current input line) moves backards/upwards.
+       Hovever, when the console width is decreased (again), the cursor position (end of current input line)
+       will not move downwards again. So input_line_coord_y will only ever move upwards.
+     */
+    
+    int linear_cursor_pos = con->prompt_size + con->input_pos;
+    
+    int lines = linear_cursor_pos / csbi.dwSize.X;
+    int rest = linear_cursor_pos % csbi.dwSize.X;
+    
+    if(rest != csbi.dwCursorPosition.X) {
+      /* Strange! If the cursor moved due to line-unwrapping, then its column position
+         should be exactly rest.
+       */
+      
+      wchar_t buffer[100];
+      
+      StringCbPrintfW(buffer, sizeof(buffer),
+          L"incomplete unwrap: cursor.X = %d != %d\n",
+          (int)csbi.dwCursorPosition.X,
+          rest);
+          
+      OutputDebugStringW(buffer);
+    }
+    
+    if(con->input_line_coord_y != csbi.dwSize.Y - lines) {
+      wchar_t buffer[100];
+      
+      StringCbPrintfW(buffer, sizeof(buffer),
+          L"move input_line_coord_y from %d to %d\n",
+          con->input_line_coord_y,
+          csbi.dwSize.Y - lines);
+          
+      OutputDebugStringW(buffer);
+    }
+    
+    con->input_line_coord_y = csbi.dwSize.Y - lines;
+  }
   
   hyperlink_system_end_input();
   update_output(con);
