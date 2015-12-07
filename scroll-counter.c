@@ -2,6 +2,7 @@
 #include "memory-util.h"
 
 #include <assert.h>
+#include <limits.h>
 
 
 #define MIN(A, B)  ((A) < (B) ? (A) : (B))

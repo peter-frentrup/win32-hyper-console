@@ -846,7 +846,7 @@ BOOL hyperlink_system_handle_focus_event(const FOCUS_EVENT_RECORD *er) {
 
 void hyperlink_system_start_input(int console_width, int pre_input_lines) {
   if(!_have_hyperlink_system)
-    return FALSE;
+    return;
     
   EnterCriticalSection(_cs_global_links);
   
@@ -857,7 +857,7 @@ void hyperlink_system_start_input(int console_width, int pre_input_lines) {
 
 void hyperlink_system_end_input(void) {
   if(!_have_hyperlink_system)
-    return FALSE;
+    return;
     
   EnterCriticalSection(_cs_global_links);
   
