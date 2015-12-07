@@ -148,10 +148,10 @@ static BOOL init_console(struct console_input_t *con) {
   }
   
   con->input_capacity = 256;
-  con->input_text = malloc(sizeof(wchar_t) * con->input_capacity);
+  con->input_text = allocate_memory(sizeof(wchar_t) * con->input_capacity);
   if(!con->input_text) {
     con->input_capacity = 0;
-    con->error = "malloc";
+    con->error = "allocate_memory";
     return FALSE;
   }
   
@@ -230,10 +230,10 @@ static BOOL read_prompt(struct console_input_t *con, int length) {
     return TRUE;
     
   con->prompt_size = length;
-  con->prompt = malloc(sizeof(con->prompt[0]) * con->prompt_size);
+  con->prompt = allocate_memory(sizeof(con->prompt[0]) * con->prompt_size);
   if(!con->prompt) {
     con->prompt_size = 0;
-    con->error = "malloc";
+    con->error = "allocate_memory";
     return FALSE;
   }
   
@@ -754,7 +754,7 @@ static BOOL write_output_buffer_lines(struct console_input_t *con) {
   
   lines = con->output_size / console_width;
   if(lines < con->dirty_lines) {
-    CHAR_INFO *empty = malloc((con->dirty_lines - lines) * console_width * sizeof(CHAR_INFO));
+    CHAR_INFO *empty = allocate_memory((con->dirty_lines - lines) * console_width * sizeof(CHAR_INFO));
     if(empty) {
       int i;
       
