@@ -317,6 +317,7 @@ static void clean_old_lines(struct console_scrollback_t *cs) {
   
   if(cs->visible_line_numbers.count == 0) {
     cs->past_lines_count += cs->old_lines.count;
+    
     clear_lines(&cs->old_lines);
     return;
   }
@@ -363,6 +364,10 @@ static void append_new_known_lines(struct console_scrollback_t *cs, const wchar_
       }
       
       memcpy(line->content, visible, visible_size.X * sizeof(wchar_t));
+      while(line->length > 0 && line->content[line->length - 1] == ' ')
+        line->length--;
+      line->content[line->length] = '\0';
+      
       cs->old_lines.lines[old_lines_offset + i] = line;
       cs->visible_line_numbers.line_starts[visible_lines_offset + i].column = 0;
       cs->visible_line_numbers.line_starts[visible_lines_offset + i].line = cs->past_lines_count + old_lines_offset + i;
@@ -501,9 +506,9 @@ BOOL console_scollback_global_to_local(struct console_scrollback_t *cs, int line
   
   if(line < cs->past_lines_count)
     return FALSE;
-   
+    
   coords = cs->visible_line_numbers.line_starts;
-   
+  
   if(vis_y_count > 0) {
     next_global_line = coords[vis_y_count - 1].line + 1;
   }
