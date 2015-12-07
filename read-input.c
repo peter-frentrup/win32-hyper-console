@@ -1296,9 +1296,9 @@ static void change_console_size(struct console_input_t *con, int delta_columns) 
   memset(&csbiex, 0, sizeof(csbiex));
   csbiex.cbSize = sizeof(csbiex);
   
-  if(!GetConsoleScreenBufferInfoEx(con->output_handle, &csbiex)) 
+  if(!GetConsoleScreenBufferInfoEx(con->output_handle, &csbiex))
     return;
-  
+    
   rect = csbiex.srWindow;
   csbiex.dwSize.X += delta_columns;
   csbiex.srWindow.Left = 0;
@@ -1308,7 +1308,7 @@ static void change_console_size(struct console_input_t *con, int delta_columns) 
     wchar_t buffer[100];
     StringCbPrintfW(buffer, sizeof(buffer), L"SetConsoleScreenBufferInfoEx failed: %d", (unsigned)GetLastError() );
     
-    OutputDebugStringW(buffer); 
+    OutputDebugStringW(buffer);
   }
   
   // I have no idea why this is necessary, but otherwise, the console keeps shrinking.
@@ -1317,7 +1317,7 @@ static void change_console_size(struct console_input_t *con, int delta_columns) 
     wchar_t buffer[100];
     StringCbPrintfW(buffer, sizeof(buffer), L"2 SetConsoleScreenBufferInfoEx failed: %d", (unsigned)GetLastError() );
     
-    OutputDebugStringW(buffer); 
+    OutputDebugStringW(buffer);
   }
   
   
@@ -1328,8 +1328,8 @@ static void change_console_size(struct console_input_t *con, int delta_columns) 
 //  if(!SetConsoleWindowInfo(con->output_handle, FALSE, &rect)) {
 //    wchar_t buffer[100];
 //    StringCbPrintfW(buffer, sizeof(buffer), L"SetConsoleWindowInfo failed: %d", (unsigned)GetLastError() );
-//    
-//    OutputDebugStringW(buffer); 
+//
+//    OutputDebugStringW(buffer);
 //  }
 }
 
@@ -1600,17 +1600,39 @@ static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RE
 }
 
 static void handle_window_buffer_size_event(struct console_input_t *con, const WINDOW_BUFFER_SIZE_RECORD *er) {
-  wchar_t buffer[100];
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
   
   assert(con != NULL);
   assert(er != NULL);
   
-  StringCbPrintfW(buffer, sizeof(buffer),
-      L"WINDOW_BUFFER_SIZE_EVENT (%d, %d)\n",
-      (int)er->dwSize.X,
-      (int)er->dwSize.Y);
-      
-  OutputDebugStringW(buffer);
+  {
+    wchar_t buffer[100];
+    
+    StringCbPrintfW(buffer, sizeof(buffer),
+        L"WINDOW_BUFFER_SIZE_EVENT (%d, %d)\n",
+        (int)er->dwSize.X,
+        (int)er->dwSize.Y);
+        
+    OutputDebugStringW(buffer);
+  }
+  
+  if(!GetConsoleScreenBufferInfo(con->output_handle, &csbi)) {
+    con->error = "GetConsoleScreenBufferInfo";
+    return;
+  }
+  
+  con->console_size = csbi.dwSize;
+  
+  /* TODO: Recalculate input_line_coord_y.
+     On Windows 10, when the console width is increased, line breaks disappear and the cursor position 
+     (end of current input line) moves backards/upwards. 
+     Hovever, when the console width is decreased (again), the cursor position (end of current input line) 
+     will not move downwards again. So input_line_coord_y will only ever move upwards.
+   */
+  
+  hyperlink_system_end_input();
+  update_output(con);
+  hyperlink_system_start_input(con->console_size.X, con->input_line_coord_y);
 }
 
 static void handle_focus_event(struct console_input_t *con, const FOCUS_EVENT_RECORD *er) {
