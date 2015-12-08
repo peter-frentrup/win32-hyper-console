@@ -743,7 +743,16 @@ static void hs_start_input(struct hyperlink_collection_t *hc, int console_width,
   
   if(pre_input_lines < 0)
     pre_input_lines = 0;
-    
+  
+  /* TODO: read_input should be able to state that it knows, that the local line pre_input_lines
+     is some particular global line, so we don't whipe out all links in case the old_lines are not 
+     fully visible any more.
+     (That happens on Windows < 10 when first reducing the console width, thus cutting off lines, 
+     and then increasing it again, because we do not cut of the old_lines in order to 
+     allow detecting line-unwrapping in Windows 10)
+     
+     For non-wrapping consoles, not calling console_scrollback_update() here would be best.
+   */
   console_scrollback_update(hc->scrollback, pre_input_lines);
   
   hc->console_width = console_width;
