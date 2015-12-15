@@ -3,6 +3,7 @@
 #include "read-input.h"
 #include "scroll-counter.h"
 #include "memory-util.h"
+#include "debug.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -183,6 +184,11 @@ static void clean_old_links(struct hyperlink_collection_t *hc, int first_keep_li
       hc->pressed_link = NULL;
     }
     
+    debug_printf(L"clean link %s in line %d < %d\n", 
+      (*link_ptr)->title, 
+      (*link_ptr)->start_global_line, 
+      first_keep_line);
+    
     free_link_at(link_ptr);
   }
 }
@@ -220,6 +226,7 @@ static struct hyperlink_t *open_new_link(struct hyperlink_collection_t *hc) {
   }
   
   clean_old_links(hc, top_line);
+  debug_printf(L"open new link at %d:%d (top = %d:%d)\n", line, column, top_line, top_column);
   
   link = allocate_memory(sizeof(struct hyperlink_t));
   if(!link) {
@@ -804,8 +811,8 @@ static void hs_print_debug_info(struct hyperlink_collection_t *hc) {
   fprintf(stderr, "Window at %d:%d size %d lines x %d columns\n",
       (int)csbi.srWindow.Top, 
       (int)csbi.srWindow.Left,
-      (int)csbi.srWindow.Bottom - csbi.srWindow.Top,
-      (int)csbi.srWindow.Right - csbi.srWindow.Left);
+      (int)csbi.srWindow.Bottom - csbi.srWindow.Top + 1,
+      (int)csbi.srWindow.Right - csbi.srWindow.Left + 1);
   fprintf(stderr, "Cursor at %d:%d\n",
       (int)csbi.dwCursorPosition.Y,
       (int)csbi.dwCursorPosition.X);

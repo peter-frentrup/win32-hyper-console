@@ -1,6 +1,8 @@
 #include "console-buffer-io.h"
+#include "debug.h"
 
 #define MAX_BUFFER 512
+
 
 BOOL console_read_output_character(
     HANDLE hConsoleOutput,
@@ -15,7 +17,7 @@ BOOL console_read_output_character(
   *lpNumberOfCharsRead = 0;
   
   if(!GetConsoleScreenBufferInfo(hConsoleOutput, &csbi) || csbi.dwSize.X <= 0) {
-    OutputDebugStringW(L"console_read_output_character: GetConsoleScreenBufferInfo");
+    debug_printf(L"console_read_output_character: GetConsoleScreenBufferInfo");
     return FALSE;
   }
   
@@ -23,7 +25,7 @@ BOOL console_read_output_character(
     int x;
     
     if(!ReadConsoleOutputCharacterW(hConsoleOutput, lpCharacter, MAX_BUFFER, dwReadCoord, &chars_read)) {
-      OutputDebugStringW(L"console_read_output_character: ReadConsoleOutputCharacterW");
+      debug_printf(L"console_read_output_character: ReadConsoleOutputCharacterW");
       return FALSE;
     }
     
@@ -41,7 +43,7 @@ BOOL console_read_output_character(
   
   if(nLength > 0) {
     if(!ReadConsoleOutputCharacterW(hConsoleOutput, lpCharacter, nLength, dwReadCoord, &chars_read)) {
-      OutputDebugStringW(L"console_read_output_character: ReadConsoleOutputCharacterW 2");
+      debug_printf(L"console_read_output_character: ReadConsoleOutputCharacterW 2");
       return FALSE;
     }
     
@@ -66,7 +68,7 @@ BOOL console_read_output_attribute(
   *lpNumberOfAttrsRead = 0;
   
   if(!GetConsoleScreenBufferInfo(hConsoleOutput, &csbi) || csbi.dwSize.X <= 0) {
-    OutputDebugStringW(L"console_read_output_attribute: GetConsoleScreenBufferInfo");
+    debug_printf(L"console_read_output_attribute: GetConsoleScreenBufferInfo");
     return FALSE;
   }
   
@@ -74,7 +76,7 @@ BOOL console_read_output_attribute(
     int x;
     
     if(!ReadConsoleOutputAttribute(hConsoleOutput, lpAttribute, MAX_BUFFER, dwReadCoord, &attrs_read)) {
-      OutputDebugStringW(L"console_read_output_attribute: ReadConsoleOutputAttribute");
+      debug_printf(L"console_read_output_attribute: ReadConsoleOutputAttribute");
       return FALSE;
     }
     
@@ -92,7 +94,7 @@ BOOL console_read_output_attribute(
   
   if(nLength > 0) {
     if(!ReadConsoleOutputAttribute(hConsoleOutput, lpAttribute, nLength, dwReadCoord, &attrs_read)) {
-      OutputDebugStringW(L"console_read_output_attribute: ReadConsoleOutputAttribute 2");
+      debug_printf(L"console_read_output_attribute: ReadConsoleOutputAttribute 2");
       return FALSE;
     }
       

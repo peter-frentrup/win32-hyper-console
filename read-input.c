@@ -29,6 +29,7 @@ struct console_input_t {
   int input_pos;
   int input_anchor;
   
+  /* Used to detect reflowing/word-wrapping during console resize (Windows 10) */
   COORD last_cursor_pos;
   
   int *input_to_output_positions; // [input_length + 1]
@@ -46,7 +47,7 @@ struct console_input_t {
   
   const char *error;
   int dirty_lines;
-  unsigned use_position_dependent_coloring;
+  unsigned use_position_dependent_coloring: 1;
   unsigned have_colored_fences: 1;
   unsigned multiline_mode: 1;
   unsigned stop: 1;
