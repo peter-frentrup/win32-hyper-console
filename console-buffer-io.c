@@ -35,7 +35,7 @@ BOOL console_read_output_character(
     x = dwReadCoord.X + chars_read;
     
     dwReadCoord.Y += x / csbi.dwSize.X;
-    dwReadCoord.Y = x % csbi.dwSize.X;
+    dwReadCoord.X = x % csbi.dwSize.X;
     
     if(dwReadCoord.Y >= csbi.dwSize.Y)
       return FALSE;
@@ -86,7 +86,7 @@ BOOL console_read_output_attribute(
     x = dwReadCoord.X + attrs_read;
     
     dwReadCoord.Y += x / csbi.dwSize.X;
-    dwReadCoord.Y = x % csbi.dwSize.X;
+    dwReadCoord.X = x % csbi.dwSize.X;
     
     if(dwReadCoord.Y >= csbi.dwSize.Y)
       return FALSE;
