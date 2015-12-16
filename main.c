@@ -277,18 +277,16 @@ static void change_color(const wchar_t *arg) {
           fflush(stdout);
           start_hyperlink(link);
           set_hyperlink_input_text(link);
+          set_hyperlink_color((bg << 4) | fg);
           
           SetConsoleTextAttribute(hStdout, (bg << 4) | fg);
           printf("%x%x", bg, fg);
           
           fflush(stdout);
           end_hyperlink();
-          
-          SetConsoleTextAttribute(hStdout, (bg << 4) | fg);
-          printf("?");
         }
         else {
-          printf("   ");
+          printf("  ");
         }
       }
       
@@ -397,10 +395,10 @@ static void show_help(void) {
   write_simple_link(L"exit program", L"quit", L"quit");
   printf("\t Exit the program.\n");
   
-  write_simple_link(L"open documents", L"open .", L"open");
+  write_simple_link(L"open .", L"open .", L"open");
   printf("\t Open an arbitrary file or directory.\n");
   
-  write_simple_link(L"system call", L"run cmd /?", L"run");
+  write_simple_link(L"run pause", L"run pause", L"run");
   printf("\t Execute an arbitrary command.\n");
   
   write_simple_link(L"single-line input", L"single", L"single");
