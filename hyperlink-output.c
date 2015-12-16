@@ -27,6 +27,7 @@ struct hyperlink_t {
   WORD *inactive_attributes;
   
   WORD attr_previous;
+  WORD attr_active;
 };
 
 struct hyperlink_collection_t {
@@ -59,6 +60,7 @@ static struct hyperlink_t *open_new_link(struct hyperlink_collection_t *hc);
 static void close_link(struct hyperlink_collection_t *hc);
 static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t *title, int title_length);
 static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wchar_t *text, int text_length);
+static WORD set_open_link_color(struct hyperlink_collection_t *hc, WORD attribute);
 
 static BOOL is_global_position_before(int a_line, int a_col, int b_line, int b_col);
 static struct hyperlink_t *find_link(struct hyperlink_collection_t *hc, COORD pos);
@@ -240,6 +242,7 @@ static struct hyperlink_t *open_new_link(struct hyperlink_collection_t *hc) {
   link->start_global_line = link->end_global_line = line;
   
   link->attr_previous = csbi.wAttributes;
+  link->attr_active = hc->attr_link;
   //SetConsoleTextAttribute(hc->output_handle, hc->attr_link);
   
   link->prev_link = hc->last_link;
@@ -351,6 +354,25 @@ static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wc
   else {
     link->input_text = NULL;
   }
+}
+
+static WORD set_open_link_color(struct hyperlink_collection_t *hc, WORD attribute) {
+  struct hyperlink_t *link;
+  WORD old_attr;
+  
+  assert(hc != NULL);
+  
+  if(hc->num_failed_open_links > 0)
+    return hc->attr_link;
+  
+  link = hc->last_link;
+  assert(hc->num_open_links > 0);
+  assert(link != NULL);
+  
+  old_attr = link->attr_active;
+  link->attr_active = (attribute & 0x00FF) | COMMON_LVB_UNDERSCORE;
+  
+  return old_attr;
 }
 
 static BOOL is_global_position_before(int a_line, int a_col, int b_line, int b_col) {
@@ -516,7 +538,7 @@ static BOOL activate_link(struct hyperlink_collection_t *hc, struct hyperlink_t 
     if(new_attributes != NULL) {
       int i;
       for(i = 0; i < length; ++i)
-        new_attributes[i] = hc->attr_link;
+        new_attributes[i] = link->attr_active;
         
       WriteConsoleOutputAttribute(hc->output_handle, new_attributes, length, start, &num_valid);
       
@@ -874,6 +896,20 @@ void set_hyperlink_input_text(const wchar_t *text) {
   set_open_link_input_text(_global_links, text, text ? -1 : 0);
   
   LeaveCriticalSection(_cs_global_links);
+}
+
+WORD set_hyperlink_color(WORD attribute) {
+  WORD old_color;
+  
+  assert(_have_hyperlink_system);
+  
+  EnterCriticalSection(_cs_global_links);
+  
+  old_color = set_open_link_color(_global_links, attribute);
+  
+  LeaveCriticalSection(_cs_global_links);
+  
+  return old_color;
 }
 
 BOOL hyperlink_system_handle_mouse_event(const MOUSE_EVENT_RECORD *er) {

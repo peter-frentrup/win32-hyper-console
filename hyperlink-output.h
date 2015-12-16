@@ -6,6 +6,7 @@
 
 void start_hyperlink(const wchar_t *title);
 void set_hyperlink_input_text(const wchar_t *text);
+WORD set_hyperlink_color(WORD attribute);
 void end_hyperlink(void);
 
 BOOL hyperlink_system_handle_mouse_event(const MOUSE_EVENT_RECORD *er);
