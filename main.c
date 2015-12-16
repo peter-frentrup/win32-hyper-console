@@ -79,7 +79,7 @@ static void write_current_directory_path(void) {
 static void change_directory(const wchar_t *command_rest) {
   while(*command_rest == ' ')
     ++command_rest;
-  
+    
   if(*command_rest) {
     SetCurrentDirectoryW(command_rest);
     return;
@@ -127,14 +127,14 @@ static void list_directory(void) {
     FileTimeToSystemTime( &filetime, &datetime );
     
     StringCbPrintfW(
-      datetime_string, sizeof(datetime_string), 
-      L"%4d-%02d-%02d  %02d:%02d ", 
-      (int)datetime.wYear,
-      (int)datetime.wMonth,
-      (int)datetime.wDay,
-      (int)datetime.wHour,
-      (int)datetime.wMinute);
-    
+        datetime_string, sizeof(datetime_string),
+        L"%4d-%02d-%02d  %02d:%02d ",
+        (int)datetime.wYear,
+        (int)datetime.wMonth,
+        (int)datetime.wDay,
+        (int)datetime.wHour,
+        (int)datetime.wMinute);
+        
     write_unicode(datetime_string);
     
     if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
@@ -212,13 +212,13 @@ static void write_links_sentence(const wchar_t *text) {
 static int hex(wchar_t ch) {
   if(ch >= L'0' && ch <= L'9')
     return ch - L'0';
-  
+    
   if(ch >= L'a' && ch <= L'f')
     return 10 + ch - L'a';
-  
+    
   if(ch >= L'A' && ch <= L'F')
     return 10 + ch - L'A';
-  
+    
   return -1;
 }
 
@@ -236,37 +236,37 @@ static void change_color(const wchar_t *arg) {
   
   while(*arg == L' ')
     ++arg;
-  
+    
   if(first_word_equals(arg, L"/?")) {
     printf(
-      "Change the default foreground and background color of the console window.\n"
-      "\n"
-      "color [attr]\n"
-      "\n"
-      "  attr   Specifies the color attributes.\n"
-      "\n"
-      "The color attributes are a 2-digit hex number. "
-      "The first digit specifies background, the second forground. "
-      "Each digit can be one of\n"
-      "\n"
-      "    0 = black          8 = dark gray \n"
-      "    1 = dark blue      9 = blue      \n"
-      "    2 = dark green     A = green     \n"
-      "    3 = teal           B = cyan      \n"
-      "    4 = dark red       C = red       \n"
-      "    5 = purple         D = magenta   \n"
-      "    6 = ochre          E = yellow    \n"
-      "    7 = light gray     F = white     \n"
-      "\n");
-    
+        "Change the default foreground and background color of the console window.\n"
+        "\n"
+        "color [attr]\n"
+        "\n"
+        "  attr   Specifies the color attributes.\n"
+        "\n"
+        "The color attributes are a 2-digit hex number. "
+        "The first digit specifies background, the second forground. "
+        "Each digit can be one of\n"
+        "\n"
+        "    0 = black          8 = dark gray \n"
+        "    1 = dark blue      9 = blue      \n"
+        "    2 = dark green     A = green     \n"
+        "    3 = teal           B = cyan      \n"
+        "    4 = dark red       C = red       \n"
+        "    5 = purple         D = magenta   \n"
+        "    6 = ochre          E = yellow    \n"
+        "    7 = light gray     F = white     \n"
+        "\n");
+        
     printf("Example: ");
     write_simple_link(L"red text on white background", L"color fc", L"color fc");
     printf("\n");
     
-    for(bg = 0; bg < 16;++bg) {
+    for(bg = 0; bg < 16; ++bg) {
       printf(" ");
       
-      for(fg = 0;fg < 16;++fg) {
+      for(fg = 0; fg < 16; ++fg) {
         SetConsoleTextAttribute(hStdout, csbi.wAttributes);
         printf(" ");
         
@@ -277,7 +277,7 @@ static void change_color(const wchar_t *arg) {
           fflush(stdout);
           start_hyperlink(link);
           set_hyperlink_input_text(link);
-    
+          
           SetConsoleTextAttribute(hStdout, (bg << 4) | fg);
           printf("%x%x", bg, fg);
           
@@ -287,16 +287,16 @@ static void change_color(const wchar_t *arg) {
           SetConsoleTextAttribute(hStdout, (bg << 4) | fg);
           printf("?");
         }
-        else{
+        else {
           printf("   ");
         }
-      } 
+      }
       
       SetConsoleTextAttribute(hStdout, csbi.wAttributes);
       printf("\n");
     }
   }
-  else{
+  else {
     bg = hex(*arg);
     if(bg >= 0) {
       ++arg;
@@ -306,7 +306,7 @@ static void change_color(const wchar_t *arg) {
         ++arg;
         while(*arg == L' ')
           ++arg;
-        
+          
         if(*arg == L'\0') {
           char cmd[10];
           
@@ -317,14 +317,14 @@ static void change_color(const wchar_t *arg) {
 //            printf("Foreground and background colors must differ.");
 //            return;
 //          }
-//        
+//
 //          if(!SetConsoleTextAttribute(hStdout, (bg << 4) | fg)) {
 //            printf("SetConsoleTextAttribute failed.\n");
 //            return;
 //          }
-//          
+//
 //          printf("New color was applied.\n");
-          
+
           return;
         }
       }
@@ -350,9 +350,8 @@ static void change_color(const wchar_t *arg) {
 }
 
 static void open_document(const wchar_t *arg) {
-  
+
   const wchar_t *filename;
-  const wchar_t *verb = NULL;
   unsigned success_flag;
   
   while(*arg == L' ')
@@ -360,11 +359,54 @@ static void open_document(const wchar_t *arg) {
     
   filename = arg;
   
-  success_flag = (unsigned)ShellExecuteW(NULL, NULL, filename, NULL, NULL, SW_SHOW);
+  success_flag = (uintptr_t)ShellExecuteW(NULL, NULL, filename, NULL, NULL, SW_SHOW);
   
   if(success_flag <= 32) {
-    printf("ShellExecute failed with %u.", success_flag);
+    printf("ShellExecute failed with %d.", (int)success_flag);
   }
+}
+
+static void show_help(void) {
+  
+  printf("Available commands\n");
+  
+  write_simple_link(L"change directory", L"cd", L"cd");
+  printf("\t Get or change the current directory.\n");
+  
+  write_simple_link(L"change and list directory", L"cd+dir .", L"cd+dir");
+  printf("\t Change directory and then list its content.\n");
+  
+  write_simple_link(L"get or set console color", L"color /?", L"color");
+  printf("\t Modify the console color.\n");
+  
+  write_simple_link(L"debug information", L"debug", L"debug");
+  printf("\t Show the current console buffer status.\n");
+  
+  write_simple_link(L"list current directory", L"dir", L"dir");
+  printf("\t List the content of the current directory.\n");
+  
+  write_simple_link(L"command help", L"help", L"help");
+  printf("\t Display this help.\n");
+  
+  write_simple_link(L"Lorem ipsum dolor sit...", L"lorem", L"lorem");
+  printf("\t Print some text full of dummy links (for testing purposes).\n");
+  
+  write_simple_link(L"multi-line input", L"multi", L"multi");
+  printf("\t Switch to multi-line input mode.\n");
+  
+  write_simple_link(L"exit program", L"quit", L"quit");
+  printf("\t Exit the program.\n");
+  
+  write_simple_link(L"open documents", L"open .", L"open");
+  printf("\t Open an arbitrary file or directory.\n");
+  
+  write_simple_link(L"system call", L"run cmd /?", L"run");
+  printf("\t Execute an arbitrary command.\n");
+  
+  write_simple_link(L"single-line input", L"single", L"single");
+  printf("\t Switch to single-line input mode (default).\n");
+  
+  printf("\nYou can use keyboard shortcuts Ctrl+C, Ctrl+X, Ctrl+V to access the clipboard.\n");
 }
 
 int main() {
@@ -398,7 +440,7 @@ int main() {
     str = read_input(multiline_mode, L"help");
     if(!str)
       continue;
-    
+      
     if(wcscmp(str, L"multi") == 0) {
       printf("Switching to multi-line mode.\n");
       multiline_mode = TRUE;
@@ -408,12 +450,6 @@ int main() {
     if(wcscmp(str, L"single") == 0) {
       printf("Switching to single-line mode.\n");
       multiline_mode = FALSE;
-      continue;
-    }
-    
-    if(wcscmp(str, L"pwd") == 0) {
-      write_current_directory_path();
-      printf("\\\n");
       continue;
     }
     
@@ -454,23 +490,7 @@ int main() {
     }
     
     if(wcscmp(str, L"help") == 0) {
-      printf("The available options are '");
-      write_simple_link(L"print working directory path", L"pwd", L"pwd");
-      printf("', '");
-      write_simple_link(L"change directory", L"cd", L"cd");
-      printf("', '");
-      write_simple_link(L"get or set console color", L"color /?", L"color");
-      printf("', '");
-      write_simple_link(L"list current directory", L"dir", L"dir");
-      printf("', '");
-      write_simple_link(L"exit program", L"quit", L"quit");
-      printf("', '");
-      write_simple_link(L"change to multi line input mode", L"multi", L"multi");
-      printf("' and '");
-      write_simple_link(L"change to single line input mode", L"single", L"single");
-      printf("'\n");
-      
-      printf("You can use keyboard shortcuts Ctrl+C, Ctrl+X, Ctrl+V to access the clipboard.\n");
+      show_help();
       continue;
     }
     
@@ -488,7 +508,7 @@ int main() {
     
     if(wcscmp(str, L"quit") == 0)
       break;
-    
+      
     write_unicode(L"you typed '");
     write_unicode(str);
     write_unicode(L"'\n");
