@@ -337,6 +337,24 @@ static void change_color(const wchar_t *arg) {
   }
 }
 
+static void open_document(const wchar_t *arg) {
+  
+  const wchar_t *filename;
+  const wchar_t *verb = NULL;
+  unsigned success_flag;
+  
+  while(*arg == L' ')
+    ++arg;
+    
+  filename = arg;
+  
+  success_flag = (unsigned)ShellExecuteW(NULL, NULL, filename, NULL, NULL, SW_SHOW);
+  
+  if(success_flag <= 32) {
+    printf("ShellExecute failed with %u.", success_flag);
+  }
+}
+
 int main() {
   BOOL multiline_mode = FALSE;
   wchar_t *str = NULL;
@@ -410,6 +428,16 @@ int main() {
     
     if(wcscmp(str, L"debug") == 0) {
       hyperlink_system_print_debug_info();
+      continue;
+    }
+    
+    if(first_word_equals(str, L"open")) {
+      open_document(str + 4);
+      continue;
+    }
+    
+    if(first_word_equals(str, L"run")) {
+      _wsystem(str + 3);
       continue;
     }
     
