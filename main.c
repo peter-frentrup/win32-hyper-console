@@ -13,6 +13,9 @@
 #include <windows.h>
 
 
+static WORD file_link_color = FOREGROUND_RED | FOREGROUND_GREEN;
+
+
 static void write_unicode(const wchar_t *str) {
   int oldmode;
   
@@ -146,7 +149,16 @@ static void list_directory(void) {
       filesize.HighPart = ffd.nFileSizeHigh;
       printf("%18" PRIu64 " ", (uint64_t)filesize.QuadPart);
       
+      StringCbPrintfW(link, sizeof(link), L"open %s\\%s", path, ffd.cFileName);
+      
+      fflush(stdout);
+      start_hyperlink(link);
+      set_hyperlink_input_text(link);
+      set_hyperlink_color(file_link_color);
+      
       write_unicode(ffd.cFileName);
+      
+      end_hyperlink();
     }
     
     printf("\n");
