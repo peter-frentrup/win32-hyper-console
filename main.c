@@ -58,7 +58,7 @@ static void write_path_links(wchar_t *path, int start) {
     ch = path[next];
     path[next] = L'\0';
     
-    StringCbPrintfW(link, sizeof(link), L"cd %s\\", path);
+    StringCbPrintfW(link, sizeof(link), L"cd+dir %s\\", path);
     write_simple_link(link, link, path + start);
     
     path[next] = ch;
@@ -90,7 +90,7 @@ static void list_directory(void) {
   WIN32_FIND_DATAW ffd;
   LARGE_INTEGER filesize;
   wchar_t path[MAX_PATH];
-  wchar_t link[MAX_PATH + 10];
+  wchar_t link[MAX_PATH + 20];
   DWORD length;
   
   HANDLE hFind = INVALID_HANDLE_VALUE;
@@ -137,7 +137,7 @@ static void list_directory(void) {
     if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
       printf("    <DIR>          ");
       
-      StringCbPrintfW(link, sizeof(link), L"cd %s\\%s\\", path, ffd.cFileName);
+      StringCbPrintfW(link, sizeof(link), L"cd+dir %s\\%s\\", path, ffd.cFileName);
       
       write_simple_link(link, link, ffd.cFileName);
     }
@@ -381,19 +381,25 @@ int main() {
       continue;
     }
     
-    if(wcscmp(str, L"dir") == 0) {
-      list_directory();
-      continue;
-    }
-    
     if(wcscmp(str, L"pwd") == 0) {
       write_current_directory_path();
       printf("\\\n");
       continue;
     }
     
+    if(wcscmp(str, L"dir") == 0) {
+      list_directory();
+      continue;
+    }
+    
     if(first_word_equals(str, L"cd")) {
       change_directory(str + 2);
+      continue;
+    }
+    
+    if(first_word_equals(str, L"cd+dir")) {
+      change_directory(str + 6);
+      list_directory();
       continue;
     }
     
