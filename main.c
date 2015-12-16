@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <strsafe.h>
 
+#include <windows.h>
+
 
 static void write_unicode(const wchar_t *str) {
   int oldmode;
@@ -195,6 +197,146 @@ static void write_links_sentence(const wchar_t *text) {
   free(str);
 }
 
+static int hex(wchar_t ch) {
+  if(ch >= L'0' && ch <= L'9')
+    return ch - L'0';
+  
+  if(ch >= L'a' && ch <= L'f')
+    return 10 + ch - L'a';
+  
+  if(ch >= L'A' && ch <= L'F')
+    return 10 + ch - L'A';
+  
+  return -1;
+}
+
+static void change_color(const wchar_t *arg) {
+  int bg;
+  int fg;
+  
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
+  
+  if(!GetConsoleScreenBufferInfo(hStdout, &csbi)) {
+    printf("GetConsoleScreenBufferInfo failed.\n");
+    return;
+  }
+  
+  while(*arg == L' ')
+    ++arg;
+  
+  if(first_word_equals(arg, L"/?")) {
+    printf(
+      "Change the default foreground and background color of the console window.\n"
+      "\n"
+      "color [attr]\n"
+      "\n"
+      "  attr   Specifies the color attributes.\n"
+      "\n"
+      "The color attributes are a 2-digit hex number. "
+      "The first digit specifies background, the second forground. "
+      "Each digit can be one of\n"
+      "\n"
+      "    0 = black          8 = dark gray \n"
+      "    1 = dark blue      9 = blue      \n"
+      "    2 = dark green     A = green     \n"
+      "    3 = teal           B = cyan      \n"
+      "    4 = dark red       C = red       \n"
+      "    5 = purple         D = magenta   \n"
+      "    6 = ochre          E = yellow    \n"
+      "    7 = light gray     F = white     \n"
+      "\n");
+    
+    printf("Example: ");
+    write_simple_link(L"red text on white background", L"color fc", L"color fc");
+    printf("\n");
+    
+    for(bg = 0; bg < 16;++bg) {
+      printf(" ");
+      
+      for(fg = 0;fg < 16;++fg) {
+        SetConsoleTextAttribute(hStdout, csbi.wAttributes);
+        printf(" ");
+        
+        if(fg != bg) {
+          wchar_t link[10];
+          
+          StringCbPrintfW(link, sizeof(link), L"color %x%x", bg, fg);
+          fflush(stdout);
+          start_hyperlink(link);
+          set_hyperlink_input_text(link);
+    
+          SetConsoleTextAttribute(hStdout, (bg << 4) | fg);
+          printf("%x%x", bg, fg);
+          
+          fflush(stdout);
+          end_hyperlink();
+          
+          SetConsoleTextAttribute(hStdout, (bg << 4) | fg);
+          printf("?");
+        }
+        else{
+          printf("   ");
+        }
+      } 
+      
+      SetConsoleTextAttribute(hStdout, csbi.wAttributes);
+      printf("\n");
+    }
+  }
+  else{
+    bg = hex(*arg);
+    if(bg >= 0) {
+      ++arg;
+      fg = hex(*arg);
+      
+      if(fg >= 0) {
+        ++arg;
+        while(*arg == L' ')
+          ++arg;
+        
+        if(*arg == L'\0') {
+          char cmd[10];
+          
+          StringCbPrintfA(cmd, sizeof(cmd), "color %x%x", bg, fg);
+          
+          system(cmd);
+//          if(fg == bg) {
+//            printf("Foreground and background colors must differ.");
+//            return;
+//          }
+//        
+//          if(!SetConsoleTextAttribute(hStdout, (bg << 4) | fg)) {
+//            printf("SetConsoleTextAttribute failed.\n");
+//            return;
+//          }
+//          
+//          printf("New color was applied.\n");
+          
+          return;
+        }
+      }
+    }
+  }
+  
+  {
+    wchar_t link[10];
+    
+    StringCbPrintfW(link, sizeof(link), L"color %02x", (unsigned)csbi.wAttributes);
+    
+    printf("Current setting is ");
+    fflush(stdout);
+    start_hyperlink(link);
+    set_hyperlink_input_text(link);
+    
+    printf("color %02x", (unsigned)csbi.wAttributes);
+    fflush(stdout);
+    
+    end_hyperlink();
+    printf(".\n");
+  }
+}
+
 int main() {
   BOOL multiline_mode = FALSE;
   wchar_t *str = NULL;
@@ -255,7 +397,12 @@ int main() {
       continue;
     }
     
-    if(first_word_equals(str, L"debug")) {
+    if(first_word_equals(str, L"color")) {
+      change_color(str + 5);
+      continue;
+    }
+    
+    if(wcscmp(str, L"debug") == 0) {
       hyperlink_system_print_debug_info();
       continue;
     }
@@ -265,6 +412,8 @@ int main() {
       write_simple_link(L"print working directory path", L"pwd", L"pwd");
       printf("', '");
       write_simple_link(L"change directory", L"cd", L"cd");
+      printf("', '");
+      write_simple_link(L"get or set console color", L"color /?", L"color");
       printf("', '");
       write_simple_link(L"list current directory", L"dir", L"dir");
       printf("', '");
