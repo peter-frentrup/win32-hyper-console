@@ -1,5 +1,6 @@
 #include "console-buffer-io.h"
 #include "debug.h"
+#include "memory-util.h"
 
 #include <assert.h>
 
@@ -8,11 +9,11 @@
 
 
 BOOL console_read_output_character(
-    HANDLE hConsoleOutput,
-    LPWSTR lpCharacter,
-    DWORD nLength,
-    COORD dwReadCoord,
-    LPDWORD lpNumberOfCharsRead
+  HANDLE hConsoleOutput,
+  LPWSTR lpCharacter,
+  DWORD nLength,
+  COORD dwReadCoord,
+  LPDWORD lpNumberOfCharsRead
 ) {
   DWORD chars_read = 0;
   CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -64,11 +65,11 @@ BOOL console_read_output_character(
 
 
 BOOL console_read_output_attribute(
-    HANDLE hConsoleOutput,
-    LPWORD lpAttribute,
-    DWORD nLength,
-    COORD dwReadCoord,
-    LPDWORD lpNumberOfAttrsRead
+  HANDLE hConsoleOutput,
+  LPWORD lpAttribute,
+  DWORD nLength,
+  COORD dwReadCoord,
+  LPDWORD lpNumberOfAttrsRead
 ) {
   DWORD attrs_read = 0;
   CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -110,7 +111,7 @@ BOOL console_read_output_attribute(
       debug_printf(L"console_read_output_attribute: ReadConsoleOutputAttribute 2");
       return FALSE;
     }
-      
+    
     *lpNumberOfAttrsRead += attrs_read;
   }
   
@@ -118,8 +119,8 @@ BOOL console_read_output_attribute(
 }
 
 static void invert_color_attributes(
-    WORD *attributes,
-    size_t count
+  WORD *attributes,
+  size_t count
 ) {
   while(count-- > 0) {
     WORD fg = *attributes & 0x000F;
@@ -131,11 +132,11 @@ static void invert_color_attributes(
 }
 
 static COORD console_output_invert_colors_helper(
-    HANDLE hConsoleOutput,
-    COORD console_size,
-    COORD start,
-    int length,
-    WORD *attribute_buffer
+  HANDLE hConsoleOutput,
+  COORD console_size,
+  COORD start,
+  int length,
+  WORD *attribute_buffer
 ) {
   DWORD attrs_read;
   DWORD attrs_written;
@@ -143,7 +144,7 @@ static COORD console_output_invert_colors_helper(
   
   if(length <= 0)
     return start;
-  
+    
   if(!ReadConsoleOutputAttribute(hConsoleOutput, attribute_buffer, length, start, &attrs_read)) {
     debug_printf(L"invert_output_color_attributes: ReadConsoleOutputAttribute");
     return start;
@@ -157,7 +158,7 @@ static COORD console_output_invert_colors_helper(
   }
   
   x = start.X + attrs_read;
-    
+  
   start.Y += x / console_size.X;
   start.X = x % console_size.X;
   
@@ -165,9 +166,9 @@ static COORD console_output_invert_colors_helper(
 }
 
 BOOL console_output_invert_colors(
-    HANDLE hConsoleOutput,
-    COORD  start,
-    int    length
+  HANDLE hConsoleOutput,
+  COORD  start,
+  int    length
 ) {
   WORD attributes[MAX_BUFFER];
   CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -179,21 +180,66 @@ BOOL console_output_invert_colors(
   
   while(length > MAX_BUFFER) {
     start = console_output_invert_colors_helper(
-      hConsoleOutput,
-      csbi.dwSize,
-      start,
-      MAX_BUFFER,
-      attributes);
-    
-    length-= MAX_BUFFER;
+              hConsoleOutput,
+              csbi.dwSize,
+              start,
+              MAX_BUFFER,
+              attributes);
+              
+    length -= MAX_BUFFER;
   }
-
+  
   console_output_invert_colors_helper(
     hConsoleOutput,
     csbi.dwSize,
     start,
     length,
     attributes);
-  
+    
   return TRUE;
 }
+
+void console_clean_lines(HANDLE hConsoleOutput, int num_lines) {
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  COORD pos;
+  wchar_t *line_chars;
+  
+  if(!GetConsoleScreenBufferInfo(hConsoleOutput, &csbi) || csbi.dwSize.X <= 0) {
+    debug_printf(L"console_clean_lines: GetConsoleScreenBufferInfo");
+    return;
+  }
+  
+  if(num_lines > csbi.dwSize.Y)
+    num_lines = csbi.dwSize.Y;
+    
+  line_chars = allocate_memory(sizeof(wchar_t) * csbi.dwSize.X);
+  if(!line_chars)
+    return;
+    
+  for(pos.Y = 0; pos.Y < num_lines; pos.Y++) {
+    DWORD num_read;
+    int x;
+    
+    pos.X = 0;
+    if(!ReadConsoleOutputCharacterW(hConsoleOutput, line_chars, csbi.dwSize.X, pos, &num_read)) {
+      debug_printf(L"console_clean_lines: ReadConsoleOutputCharacterW");
+      break;
+    }
+    
+    x = csbi.dwSize.X;
+    while(x > 0 && line_chars[x - 1] == L' ')
+      --x;
+      
+    if(x < csbi.dwSize.X) {
+      DWORD num_write;
+      pos.X = x;
+      if(!FillConsoleOutputAttribute(hConsoleOutput, csbi.wAttributes, csbi.dwSize.X - pos.X, pos, &num_write)) {
+        debug_printf(L"console_clean_lines: FillConsoleOutputAttribute");
+        break;
+      }
+    }
+  }
+  
+  free_memory(line_chars);
+}
+

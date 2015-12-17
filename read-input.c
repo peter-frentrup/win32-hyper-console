@@ -1,3 +1,5 @@
+#define _WIN32_WINNT 0x0600
+
 #include "read-input.h"
 #include "memory-util.h"
 #include "hyperlink-output.h"
@@ -1967,6 +1969,8 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
     
     con->input_line_coord_y = csbi.dwSize.Y - lines;
   }
+  
+  console_clean_lines(con->output_handle, con->input_line_coord_y);
   
   hyperlink_system_end_input();
   update_output(con);

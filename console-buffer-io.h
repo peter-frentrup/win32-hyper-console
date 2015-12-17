@@ -21,5 +21,7 @@ BOOL console_output_invert_colors(
     HANDLE hConsoleOutput,
     COORD  start,
     int    length);
+
+void console_clean_lines(HANDLE hConsoleOutput, int num_lines);
     
 #endif // __CONSOLE_BUFFER_IO_H__
