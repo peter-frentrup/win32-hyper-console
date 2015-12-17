@@ -17,4 +17,9 @@ BOOL console_read_output_attribute(
     COORD dwReadCoord,
     LPDWORD lpNumberOfAttrsRead);
 
+BOOL console_output_invert_colors(
+    HANDLE hConsoleOutput,
+    COORD  start,
+    int    length);
+    
 #endif // __CONSOLE_BUFFER_IO_H__
