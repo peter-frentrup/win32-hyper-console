@@ -732,7 +732,7 @@ static BOOL scroll_screen_if_needed(struct console_input_t *con) {
     scroll_rect.Left = 0;
     scroll_rect.Right = con->console_size.X - 1;
     scroll_rect.Top = scroll_lines;
-    scroll_rect.Bottom = con->console_size.X - 1;
+    scroll_rect.Bottom = con->console_size.Y - 1;
     
     dst.X = 0;
     dst.Y = 0;
