@@ -989,29 +989,6 @@ static BOOL delete_input_text(struct console_input_t *con, int pos, int length) 
   return TRUE;
 }
 
-static void invert_colors(struct console_input_t *con, COORD start, COORD end) {
-  int start_index;
-  int end_index;
-  int length;
-  
-  assert(con != NULL);
-  
-  start_index = start.Y * con->console_size.X + start.X;
-  end_index = end.Y * con->console_size.X + end.X;
-  
-  length = end_index - start_index;
-  if(length < 0) {
-    start.X = end.X;
-    start.Y = end.Y;
-    length = -length;
-  }
-  
-  console_output_invert_colors(
-      con->output_handle,
-      start,
-      length);
-}
-
 static BOOL have_selected_output(struct console_input_t *con) {
 
   assert(con != NULL);
@@ -1035,8 +1012,12 @@ static void select_all_output(struct console_input_t *con) {
 static void reselect_output(struct console_input_t *con, COORD pos, COORD anchor) {
   assert(con != NULL);
   
-  invert_colors(con, con->output_selection_anchor, con->output_selection_pos);
-  invert_colors(con, anchor, pos);
+  console_reinvert_colors(
+    con->output_handle, 
+    con->output_selection_anchor, 
+    con->output_selection_pos, 
+    anchor, 
+    pos);
   
   con->output_selection_anchor = anchor;
   con->output_selection_pos = pos;

@@ -9,11 +9,11 @@
 
 
 BOOL console_read_output_character(
-  HANDLE hConsoleOutput,
-  LPWSTR lpCharacter,
-  DWORD nLength,
-  COORD dwReadCoord,
-  LPDWORD lpNumberOfCharsRead
+    HANDLE hConsoleOutput,
+    LPWSTR lpCharacter,
+    DWORD nLength,
+    COORD dwReadCoord,
+    LPDWORD lpNumberOfCharsRead
 ) {
   DWORD chars_read = 0;
   CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -65,11 +65,11 @@ BOOL console_read_output_character(
 
 
 BOOL console_read_output_attribute(
-  HANDLE hConsoleOutput,
-  LPWORD lpAttribute,
-  DWORD nLength,
-  COORD dwReadCoord,
-  LPDWORD lpNumberOfAttrsRead
+    HANDLE hConsoleOutput,
+    LPWORD lpAttribute,
+    DWORD nLength,
+    COORD dwReadCoord,
+    LPDWORD lpNumberOfAttrsRead
 ) {
   DWORD attrs_read = 0;
   CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -119,8 +119,8 @@ BOOL console_read_output_attribute(
 }
 
 static void invert_color_attributes(
-  WORD *attributes,
-  size_t count
+    WORD *attributes,
+    size_t count
 ) {
   while(count-- > 0) {
     WORD fg = *attributes & 0x000F;
@@ -132,11 +132,11 @@ static void invert_color_attributes(
 }
 
 static COORD console_output_invert_colors_helper(
-  HANDLE hConsoleOutput,
-  COORD console_size,
-  COORD start,
-  int length,
-  WORD *attribute_buffer
+    HANDLE hConsoleOutput,
+    COORD console_size,
+    COORD start,
+    int length,
+    WORD *attribute_buffer
 ) {
   DWORD attrs_read;
   DWORD attrs_written;
@@ -165,38 +165,88 @@ static COORD console_output_invert_colors_helper(
   return start;
 }
 
-BOOL console_output_invert_colors(
-  HANDLE hConsoleOutput,
-  COORD  start,
-  int    length
+static void invert_colors_start_end(
+    HANDLE hConsoleOutput,
+    COORD  console_size,
+    COORD  start,
+    COORD  end
 ) {
   WORD attributes[MAX_BUFFER];
-  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  int start_index;
+  int end_index;
+  int length;
   
-  if(!GetConsoleScreenBufferInfo(hConsoleOutput, &csbi) || csbi.dwSize.X <= 0) {
-    debug_printf(L"console_invert_output_color: GetConsoleScreenBufferInfo");
-    return FALSE;
-  }
+  if(console_size.X <= 0)
+    return;
+  
+  start_index = start.Y * console_size.X + start.X;
+  end_index   = end.Y * console_size.X + end.X;
+  
+  length = end_index - start_index;
+  assert(length >= 0);
   
   while(length > MAX_BUFFER) {
     start = console_output_invert_colors_helper(
-              hConsoleOutput,
-              csbi.dwSize,
-              start,
-              MAX_BUFFER,
-              attributes);
-              
+        hConsoleOutput,
+        console_size,
+        start,
+        MAX_BUFFER,
+        attributes);
+        
     length -= MAX_BUFFER;
   }
   
   console_output_invert_colors_helper(
-    hConsoleOutput,
-    csbi.dwSize,
-    start,
-    length,
-    attributes);
+      hConsoleOutput,
+      console_size,
+      start,
+      length,
+      attributes);
+}
+
+static int cmp_coords(const void *coord_ptr_a, const void *coord_ptr_b) {
+  COORD a = *(const COORD*)coord_ptr_a;
+  COORD b = *(const COORD*)coord_ptr_b;
+  
+  if(a.Y < b.Y)
+    return -1;
+  
+  if(a.Y > b.Y)
+    return +1;
     
-  return TRUE;
+  if(a.X < b.X)
+    return -1;
+  
+  if(a.X > b.X)
+    return +1;
+  
+  return 0;
+}
+
+void console_reinvert_colors(
+    HANDLE hConsoleOutput,
+    COORD old_start,
+    COORD old_end,
+    COORD new_start,
+    COORD new_end
+) {
+  COORD coords[4];
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  
+  if(!GetConsoleScreenBufferInfo(hConsoleOutput, &csbi) || csbi.dwSize.X <= 0) {
+    debug_printf(L"console_invert_output_color: GetConsoleScreenBufferInfo");
+    return;
+  }
+  
+  coords[0] = old_start;
+  coords[1] = old_end;
+  coords[2] = new_start;
+  coords[3] = new_end;
+  
+  qsort(coords, 4, sizeof(COORD), cmp_coords);
+  
+  invert_colors_start_end(hConsoleOutput, csbi.dwSize, coords[0], coords[1]);
+  invert_colors_start_end(hConsoleOutput, csbi.dwSize, coords[2], coords[3]);
 }
 
 void console_clean_lines(HANDLE hConsoleOutput, int num_lines) {

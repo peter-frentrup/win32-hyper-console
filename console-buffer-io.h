@@ -17,10 +17,12 @@ BOOL console_read_output_attribute(
     COORD dwReadCoord,
     LPDWORD lpNumberOfAttrsRead);
 
-BOOL console_output_invert_colors(
-    HANDLE hConsoleOutput,
-    COORD  start,
-    int    length);
+void console_reinvert_colors(
+  HANDLE hConsoleOutput,
+  COORD old_start,
+  COORD old_end,
+  COORD new_start,
+  COORD new_end);
 
 void console_clean_lines(HANDLE hConsoleOutput, int num_lines);
     
