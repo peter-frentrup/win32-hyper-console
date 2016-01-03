@@ -87,6 +87,8 @@ static BOOL hs_handle_mouse_event(struct hyperlink_collection_t *hc, const MOUSE
 static BOOL hs_handle_key_event(struct hyperlink_collection_t *hc, const KEY_EVENT_RECORD *er);
 static BOOL hs_handle_focus_event(struct hyperlink_collection_t *hc, const FOCUS_EVENT_RECORD *er);
 
+static BOOL hs_handle_events(struct hyperlink_collection_t *hc, INPUT_RECORD *event);
+
 static void hs_start_input(struct hyperlink_collection_t *hc, int console_width, int pre_input_lines);
 static void hs_end_input(struct hyperlink_collection_t *hc);
 
@@ -679,7 +681,9 @@ static BOOL hs_handle_mouse_up(struct hyperlink_collection_t *hc, const MOUSE_EV
   
   if(er->dwButtonState == 0) {
     if(hc->pressed_link) {
-      if(hc->pressed_link->input_text) {
+      struct hyperlink_t *link = find_link(hc, er->dwMousePosition);
+    
+      if(link == hc->pressed_link && hc->pressed_link->input_text) {
         if(!stop_current_input(FALSE, hc->pressed_link->input_text)) {
           // beep
         }
@@ -771,6 +775,46 @@ static BOOL hs_handle_focus_event(struct hyperlink_collection_t *hc, const FOCUS
   return FALSE;
 }
 
+static BOOL hs_handle_events(struct hyperlink_collection_t *hc, INPUT_RECORD *event) {
+  HANDLE input_handle;
+  
+  assert(hc != NULL);
+  assert(event != NULL);
+  
+  input_handle = GetStdHandle(STD_INPUT_HANDLE);
+  
+  for(;;) {
+    DWORD num_read;
+    
+    switch(event->EventType) {
+      case KEY_EVENT:
+        if(!hs_handle_key_event(hc, &event->Event.KeyEvent))
+          return FALSE;
+        break;
+        
+      case MOUSE_EVENT:
+        if(!hs_handle_mouse_event(hc, &event->Event.MouseEvent))
+          return FALSE;
+        break;
+        
+      case FOCUS_EVENT:
+        if(!hs_handle_focus_event(hc, &event->Event.FocusEvent))
+          return FALSE;
+        break;
+        
+      default:
+        return FALSE;
+    }
+    
+    if(!hc->pressed_link)
+      return TRUE;
+      
+    if(!ReadConsoleInputW(input_handle, event, 1, &num_read) || num_read < 1)
+      return TRUE;
+  };
+  
+  return FALSE;
+}
 
 static void hs_start_input(struct hyperlink_collection_t *hc, int console_width, int pre_input_lines) {
   assert(hc != NULL);
@@ -918,45 +962,15 @@ WORD set_hyperlink_color(WORD attribute) {
   return old_color;
 }
 
-BOOL hyperlink_system_handle_mouse_event(const MOUSE_EVENT_RECORD *er) {
+BOOL hyperlink_system_handle_events(INPUT_RECORD *event) {
   BOOL handled;
   
   if(!_have_hyperlink_system)
     return FALSE;
-    
+  
   EnterCriticalSection(_cs_global_links);
   
-  handled = hs_handle_mouse_event(_global_links, er);
-  
-  LeaveCriticalSection(_cs_global_links);
-  
-  return handled;
-}
-
-BOOL hyperlink_system_handle_key_event(const KEY_EVENT_RECORD *er) {
-  BOOL handled;
-  
-  if(!_have_hyperlink_system)
-    return FALSE;
-    
-  EnterCriticalSection(_cs_global_links);
-  
-  handled = hs_handle_key_event(_global_links, er);
-  
-  LeaveCriticalSection(_cs_global_links);
-  
-  return handled;
-}
-
-BOOL hyperlink_system_handle_focus_event(const FOCUS_EVENT_RECORD *er) {
-  BOOL handled;
-  
-  if(!_have_hyperlink_system)
-    return FALSE;
-    
-  EnterCriticalSection(_cs_global_links);
-  
-  handled = hs_handle_focus_event(_global_links, er);
+  handled = hs_handle_events(_global_links, event);
   
   LeaveCriticalSection(_cs_global_links);
   

@@ -25,7 +25,6 @@
 enum mouse_capture_t {
   MOUSE_CAPTURE_NONE,
   MOUSE_CAPTURE_INPUT_SELECTION,
-  MOUSE_CAPTURE_HYPERLINK,
   MOUSE_CAPTURE_OUTPUT_SELECTION
 };
 
@@ -141,6 +140,8 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
 static void handle_focus_event(struct console_input_t *con, const FOCUS_EVENT_RECORD *er);
 static void handle_menu_event(struct console_input_t *con, const MENU_EVENT_RECORD *er);
 static void handle_unknown_event(struct console_input_t *con, const INPUT_RECORD *ir);
+
+static BOOL is_mouse_event_inside_edit_region(struct console_input_t *con, INPUT_RECORD *ir);
 
 static void finish_input(struct console_input_t *con);
 static BOOL input_loop(struct console_input_t *con);
@@ -1707,9 +1708,6 @@ static void handle_key_event(struct console_input_t *con, const KEY_EVENT_RECORD
   assert(con != NULL);
   assert(er != NULL);
   
-  if(hyperlink_system_handle_key_event(er))
-    return;
-    
   if(er->bKeyDown)
     handle_key_down(con, er);
 }
@@ -1719,11 +1717,6 @@ static void handle_lbutton_down(struct console_input_t *con, const MOUSE_EVENT_R
   
   assert(con != NULL);
   assert(er != NULL);
-  
-  if(hyperlink_system_handle_mouse_event(er)) {
-    con->mouse_capture = MOUSE_CAPTURE_HYPERLINK;
-    return;
-  }
   
   i = get_input_position_from_screen_position(con, er->dwMousePosition, FALSE);
   
@@ -1751,10 +1744,6 @@ static void handle_mouse_up(struct console_input_t *con, const MOUSE_EVENT_RECOR
   assert(er != NULL);
   
   switch(con->mouse_capture) {
-    case MOUSE_CAPTURE_HYPERLINK:
-      hyperlink_system_handle_mouse_event(er);
-      break;
-      
     case MOUSE_CAPTURE_INPUT_SELECTION:
     case MOUSE_CAPTURE_OUTPUT_SELECTION:
     case MOUSE_CAPTURE_NONE:
@@ -1771,10 +1760,6 @@ static void handle_lbutton_move(struct console_input_t *con, const MOUSE_EVENT_R
   assert(er != NULL);
   
   switch(con->mouse_capture) {
-    case MOUSE_CAPTURE_HYPERLINK:
-      hyperlink_system_handle_mouse_event(er);
-      return;
-      
     case MOUSE_CAPTURE_INPUT_SELECTION:
       i = get_input_position_from_screen_position(con, er->dwMousePosition, TRUE);
       if(i >= 0 && i != con->input_pos) {
@@ -1794,11 +1779,6 @@ static void handle_lbutton_move(struct console_input_t *con, const MOUSE_EVENT_R
 
 static void handle_lbutton_double_click(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
   int i;
-  
-  if(hyperlink_system_handle_mouse_event(er)) {
-    //con->mouse_capture = MOUSE_CAPTURE_HYPERLINK;
-    return;
-  }
   
   assert(con != NULL);
   assert(er != NULL);
@@ -1855,9 +1835,6 @@ static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RE
     case MOUSE_MOVED:
       if(er->dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) {
         handle_lbutton_move(con, er);
-      }
-      else {
-        hyperlink_system_handle_mouse_event(er);
       }
       break;
       
@@ -1935,12 +1912,7 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
 }
 
 static void handle_focus_event(struct console_input_t *con, const FOCUS_EVENT_RECORD *er) {
-  assert(con != NULL);
-  assert(er != NULL);
-  
-  if(hyperlink_system_handle_focus_event(er))
-    return;
-    
+
 }
 
 static void handle_menu_event(struct console_input_t *con, const MENU_EVENT_RECORD *er) {
@@ -1956,6 +1928,20 @@ static void handle_unknown_event(struct console_input_t *con, const INPUT_RECORD
   StringCbPrintfW(buffer, sizeof(buffer), L"Unknown INPUT_RECORD %d\n", (int)ir->EventType);
   
   OutputDebugStringW(buffer);
+}
+
+
+static BOOL is_mouse_event_inside_edit_region(struct console_input_t *con, INPUT_RECORD *ir) {
+  int i;
+  
+  assert(con != NULL);
+  assert(ir != NULL);
+  
+  if(ir->EventType != MOUSE_EVENT)
+    return FALSE;
+    
+  i = get_input_position_from_screen_position(con, ir->Event.MouseEvent.dwMousePosition, FALSE);
+  return i >= 0;
 }
 
 static void finish_input(struct console_input_t *con) {
@@ -1998,46 +1984,43 @@ static BOOL input_loop(struct console_input_t *con) {
   read_prompt(con, con->prompt_size);
   
   while(!con->stop && !con->error) {
-    INPUT_RECORD input_records[1];
+    INPUT_RECORD event;
     DWORD num_read;
-    int i;
     
-    if(!ReadConsoleInputW(
-        con->input_handle,
-        input_records,
-        sizeof(input_records) / sizeof(input_records[0]),
-        &num_read))
-    {
+    if(!ReadConsoleInputW(con->input_handle, &event, 1, &num_read) || num_read < 1) {
       con->error = "ReadConsoleInputW";
       break;
     }
     
-    for(i = 0; i < num_read; ++i) {
-      switch(input_records[i].EventType) {
-        case KEY_EVENT:
-          handle_key_event(con, &input_records[i].Event.KeyEvent);
-          break;
-          
-        case MOUSE_EVENT:
-          handle_mouse_event(con, &input_records[i].Event.MouseEvent);
-          break;
-          
-        case WINDOW_BUFFER_SIZE_EVENT: // scrn buf. resizing
-          handle_window_buffer_size_event(con, &input_records[i].Event.WindowBufferSizeEvent);
-          break;
-          
-        case FOCUS_EVENT:
-          handle_focus_event(con, &input_records[i].Event.FocusEvent);
-          break;
-          
-        case MENU_EVENT:   // disregard menu events
-          handle_menu_event(con, &input_records[i].Event.MenuEvent);
-          break;
-          
-        default:
-          handle_unknown_event(con, &input_records[i]);
-          break;
-      }
+    if(!is_mouse_event_inside_edit_region(con, &event)) {
+      if(hyperlink_system_handle_events(&event))
+        continue;
+    }
+    
+    switch(event.EventType) {
+      case KEY_EVENT:
+        handle_key_event(con, &event.Event.KeyEvent);
+        break;
+        
+      case MOUSE_EVENT:
+        handle_mouse_event(con, &event.Event.MouseEvent);
+        break;
+        
+      case WINDOW_BUFFER_SIZE_EVENT: // scrn buf. resizing
+        handle_window_buffer_size_event(con, &event.Event.WindowBufferSizeEvent);
+        break;
+        
+      case FOCUS_EVENT:
+        handle_focus_event(con, &event.Event.FocusEvent);
+        break;
+        
+      case MENU_EVENT:   // disregard menu events
+        handle_menu_event(con, &event.Event.MenuEvent);
+        break;
+        
+      default:
+        handle_unknown_event(con, &event);
+        break;
     }
   }
   
