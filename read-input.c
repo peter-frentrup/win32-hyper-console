@@ -145,7 +145,6 @@ static BOOL handle_output_selection_key_down(struct console_input_t *con, const 
 static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er);
 static void handle_key_event(struct console_input_t *con, const KEY_EVENT_RECORD *er);
 
-static void handle_mouse_wheel(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
 static void handle_lbutton_down(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
 static void handle_mouse_up(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
 static void handle_lbutton_move(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
@@ -362,7 +361,7 @@ static int get_input_position_from_screen_position(struct console_input_t *con, 
   }
   else if(index <= con->prompt_size)
     return -1;
-  
+    
   return get_input_position_from_output_position(con, index);
 }
 
@@ -1202,7 +1201,7 @@ static void extend_output_selection_left(struct console_input_t *con, BOOL jump_
   assert(con != NULL);
   if(con->error)
     return;
-  
+    
   new_pos = con->output_selection_pos;
   if(new_pos.X > 0) {
     new_pos.X--;
@@ -1229,7 +1228,7 @@ static void extend_output_selection_right(struct console_input_t *con, BOOL jump
   assert(con != NULL);
   if(con->error)
     return;
-  
+    
   new_pos = con->output_selection_pos;
   
   if(jump_word) {
@@ -1256,13 +1255,13 @@ static void extend_output_selection_up(struct console_input_t *con) {
   assert(con != NULL);
   if(con->error)
     return;
-  
+    
   new_pos = con->output_selection_pos;
   if(new_pos.Y > 0)
     new_pos.Y--;
   else if(new_pos.X > 0)
     new_pos.X = 0;
-  
+    
   new_pos = make_nonempty_output_selection_left(con, new_pos);
   
   reselect_output(con, new_pos, con->output_selection_anchor);
@@ -1274,13 +1273,13 @@ static void extend_output_selection_down(struct console_input_t *con) {
   assert(con != NULL);
   if(con->error)
     return;
-  
+    
   new_pos = con->output_selection_pos;
   if(new_pos.Y + 1 < con->console_size.Y)
     new_pos.Y++;
   else if(new_pos.X < con->console_size.X)
     new_pos.X = con->console_size.X;
-  
+    
   new_pos = make_nonempty_output_selection_right(con, new_pos);
   
   reselect_output(con, new_pos, con->output_selection_anchor);
@@ -1969,37 +1968,6 @@ static void handle_key_event(struct console_input_t *con, const KEY_EVENT_RECORD
     handle_key_down(con, er);
 }
 
-static void handle_mouse_wheel(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
-  CONSOLE_SCREEN_BUFFER_INFO csbi;
-  short scroll_delta;
-  int scroll_lines = 3;
-  
-  assert(con != NULL);
-  assert(er != NULL);
-  
-  scroll_delta = (short)HIWORD(er->dwButtonState);
-  
-  SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
-  scroll_lines = (scroll_lines * scroll_delta) / WHEEL_DELTA;
-  
-  memset(&csbi, 0, sizeof(csbi));
-  if(GetConsoleScreenBufferInfo(con->output_handle, &csbi)) {
-    csbi.srWindow.Top -= scroll_lines;
-    csbi.srWindow.Bottom -= scroll_lines;
-    
-    if(csbi.srWindow.Top < 0) {
-      csbi.srWindow.Bottom += (0 - csbi.srWindow.Top);
-      csbi.srWindow.Top = 0;
-    }
-    else if(csbi.srWindow.Bottom >= csbi.dwSize.Y) {
-      csbi.srWindow.Top += (csbi.dwSize.Y - 1 - csbi.srWindow.Bottom);
-      csbi.srWindow.Bottom = csbi.dwSize.Y - 1;
-    }
-    
-    SetConsoleWindowInfo(con->output_handle, TRUE, &csbi.srWindow);
-  }
-}
-
 static void handle_lbutton_down(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
   int i;
   
@@ -2148,12 +2116,8 @@ static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RE
       break;
       
     case MOUSE_HWHEELED:
-      
-      break;
-      
     case MOUSE_WHEELED:
-      
-      handle_mouse_wheel(con, er);
+      console_scroll_wheel(con->output_handle, er);
       break;
   }
 }

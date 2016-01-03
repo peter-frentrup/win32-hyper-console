@@ -178,7 +178,7 @@ static void invert_colors_start_end(
   
   if(console_size.X <= 0)
     return;
-  
+    
   start_index = start.Y * console_size.X + start.X;
   end_index   = end.Y * console_size.X + end.X;
   
@@ -215,16 +215,16 @@ static int cmp_coords(const void *coord_ptr_a, const void *coord_ptr_b) {
   
   if(a.Y < b.Y)
     return -1;
-  
+    
   if(a.Y > b.Y)
     return +1;
     
   if(a.X < b.X)
     return -1;
-  
+    
   if(a.X > b.X)
     return +1;
-  
+    
   return 0;
 }
 
@@ -298,3 +298,38 @@ void console_clean_lines(HANDLE hConsoleOutput, int num_lines) {
   free_memory(line_chars);
 }
 
+BOOL console_scroll_wheel(HANDLE hConsoleOutput, const MOUSE_EVENT_RECORD *er) {
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  short scroll_delta;
+  int scroll_lines = 3;
+  
+  assert(er != NULL);
+  
+  if(er->dwEventFlags == MOUSE_WHEELED) {
+    scroll_delta = (short)HIWORD(er->dwButtonState);
+    
+    SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
+    scroll_lines = (scroll_lines * scroll_delta) / WHEEL_DELTA;
+    
+    memset(&csbi, 0, sizeof(csbi));
+    if(GetConsoleScreenBufferInfo(hConsoleOutput, &csbi)) {
+      csbi.srWindow.Top -= scroll_lines;
+      csbi.srWindow.Bottom -= scroll_lines;
+      
+      if(csbi.srWindow.Top < 0) {
+        csbi.srWindow.Bottom += (0 - csbi.srWindow.Top);
+        csbi.srWindow.Top = 0;
+      }
+      else if(csbi.srWindow.Bottom >= csbi.dwSize.Y) {
+        csbi.srWindow.Top += (csbi.dwSize.Y - 1 - csbi.srWindow.Bottom);
+        csbi.srWindow.Bottom = csbi.dwSize.Y - 1;
+      }
+      
+      SetConsoleWindowInfo(hConsoleOutput, TRUE, &csbi.srWindow);
+    }
+    
+    return TRUE;
+  }
+  
+  return FALSE;
+}
