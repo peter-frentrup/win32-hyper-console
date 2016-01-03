@@ -182,6 +182,11 @@ static void invert_colors_start_end(
   start_index = start.Y * console_size.X + start.X;
   end_index   = end.Y * console_size.X + end.X;
   
+  if(start.X == console_size.X) {
+    start.Y++;
+    start.X = 0;
+  }
+  
   length = end_index - start_index;
   assert(length >= 0);
   
