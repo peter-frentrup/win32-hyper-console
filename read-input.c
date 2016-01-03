@@ -89,8 +89,6 @@ static int get_input_position_from_screen_position(struct console_input_t *con, 
 static BOOL resize_output_buffer(struct console_input_t *con, int size);
 static BOOL fill_output_buffer(struct console_input_t *con);
 static BOOL expand_glyphs(struct console_input_t *con);
-static wchar_t get_opposite_fence(wchar_t ch);
-static int find_matching_fence(struct console_input_t *con, int pos);
 static BOOL colorize_matching_fences(struct console_input_t *con);
 static void highlight_selection(struct console_input_t *con);
 static BOOL extend_output_buffer_to_full_lines(struct console_input_t *con);
@@ -523,84 +521,6 @@ static BOOL expand_glyphs(struct console_input_t *con) {
   return 1;
 }
 
-static wchar_t get_opposite_fence(wchar_t ch) {
-  switch(ch) {
-    case L'(':
-      return L')';
-      
-    case L'[':
-      return L']';
-      
-    case L'{':
-      return L'}';
-      
-    case L')':
-      return L'(';
-      
-    case L']':
-      return L'[';
-      
-    case L'}':
-      return L'{';
-      
-    default:
-      return L'\0';
-  }
-}
-
-static int find_matching_fence(struct console_input_t *con, int pos) {
-  int direction;
-  wchar_t fence;
-  wchar_t other_fence;
-  int depth;
-  
-  assert(con != NULL);
-  if(con->error)
-    return -1;
-    
-  assert(pos >= 0);
-  assert(pos <= con->input_length);
-  
-  fence = con->input_text[pos];
-  other_fence = get_opposite_fence(fence);
-  if(!other_fence)
-    return -1;
-    
-  switch(fence) {
-    case L'(':
-    case L'[':
-    case L'{':
-      direction = +1;
-      break;
-      
-    case L')':
-    case L']':
-    case L'}':
-      direction = -1;
-      break;
-      
-    default:
-      return -1;
-  }
-  
-  depth = 0;
-  for(; pos >= 0 && pos < con->input_length; pos += direction) {
-    if(con->input_text[pos] == fence) {
-      ++depth;
-      continue;
-    }
-    
-    if(con->input_text[pos] == other_fence) {
-      if(--depth == 0)
-        return pos;
-        
-      continue;
-    }
-  }
-  
-  return -1;
-}
-
 static BOOL colorize_matching_fences(struct console_input_t *con) {
   int other_pos;
   int pos;
@@ -622,7 +542,7 @@ static BOOL colorize_matching_fences(struct console_input_t *con) {
   for(pos = con->input_pos; pos >= 0 && pos >= con->input_pos - 1; --pos) {
     buf_pos = get_output_position_from_input_position(con, pos);
     
-    other_pos = find_matching_fence(con, pos);
+    other_pos = console_find_opposite_fence(con->input_text, con->input_length, pos);
     if(other_pos >= 0) {
       other_buf_pos = get_output_position_from_input_position(con, other_pos);
       
@@ -633,7 +553,7 @@ static BOOL colorize_matching_fences(struct console_input_t *con) {
       return TRUE;
     }
     
-    if(get_opposite_fence(con->input_text[pos])) {
+    if(console_get_opposite_fence(con->input_text[pos])) {
       con->output_buffer[buf_pos].Attributes = con->attr_missing_fence;
       
       con->have_colored_fences = TRUE;
