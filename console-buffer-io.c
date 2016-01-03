@@ -1,6 +1,7 @@
 #include "console-buffer-io.h"
 #include "debug.h"
 #include "memory-util.h"
+#include "text-util.h"
 
 #include <assert.h>
 
@@ -458,4 +459,69 @@ void console_paste_from_clipboard(HANDLE hConsoleInput) {
   }
   
   CloseClipboard();
+}
+
+BOOL console_get_screen_word_start_end(HANDLE hConsoleOutput, COORD pos, COORD *start, COORD *end) {
+  int length;
+  int offset;
+  wchar_t *screen;
+  DWORD num_read;
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  
+  assert(start != NULL);
+  assert(end != NULL);
+  assert(start != end);
+  
+  assert(pos.X >= 0);
+  assert(pos.Y >= 0);
+  
+  *start = *end = pos;
+  
+  if(!GetConsoleScreenBufferInfo(hConsoleOutput, &csbi))
+    return FALSE;
+    
+  length = csbi.dwSize.X;
+  offset = 0;
+  start->X = 0;
+  start->Y = pos.Y;
+  if(start->Y > 0) {
+    offset += csbi.dwSize.X;
+    length += csbi.dwSize.X;
+    start->Y -= 1;
+  }
+  
+  if(start->Y + 1 < csbi.dwSize.Y) {
+    length += csbi.dwSize.X;
+  }
+  
+  screen = allocate_memory(sizeof(wchar_t) * length);
+  if(!screen) 
+    return FALSE;
+  
+  if(console_read_output_character(hConsoleOutput, screen, length, *start, &num_read)) {
+    int s = console_get_word_start(screen, length, pos.X + offset);
+    int e = console_get_word_end(screen, length, pos.X + offset);
+    
+    if(s < offset) {
+      while(s < offset && iswspace(screen[s]))
+        ++s;
+    }
+    
+    if(e > offset + csbi.dwSize.X) {
+      while(e > offset + csbi.dwSize.X && iswspace(screen[e - 1]))
+        --e;
+    }
+    
+    end->Y = start->Y + e / csbi.dwSize.X;
+    end->X = start->X + e % csbi.dwSize.X;
+    
+    start->Y += s / csbi.dwSize.X;
+    start->X += s % csbi.dwSize.X;
+    
+    free_memory(screen);
+    return TRUE;
+  }
+  
+  free_memory(screen);
+  return FALSE;
 }

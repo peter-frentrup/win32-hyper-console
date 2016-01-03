@@ -108,8 +108,6 @@ static BOOL have_selected_output(struct console_input_t *con);
 static void select_all_output(struct console_input_t *con);
 static void reselect_output(struct console_input_t *con, COORD pos, COORD anchor);
 
-static BOOL get_screen_word_start_end(struct console_input_t *con, COORD pos, COORD *start, COORD *end);
-
 static COORD make_nonempty_output_selection_left(struct console_input_t *con, COORD new_pos);
 static COORD make_nonempty_output_selection_right(struct console_input_t *con, COORD new_pos);
 
@@ -1023,72 +1021,6 @@ static void reselect_output(struct console_input_t *con, COORD pos, COORD anchor
   con->output_selection_pos = pos;
 }
 
-static BOOL get_screen_word_start_end(struct console_input_t *con, COORD pos, COORD *start, COORD *end) {
-  int length;
-  int offset;
-  wchar_t *screen;
-  DWORD num_read;
-  
-  assert(con != NULL);
-  assert(start != NULL);
-  assert(end != NULL);
-  assert(start != end);
-  
-  assert(pos.X >= 0);
-  assert(pos.Y >= 0);
-  
-  *start = *end = pos;
-  if(con->error)
-    return FALSE;
-    
-  length = con->console_size.X;
-  offset = 0;
-  start->X = 0;
-  start->Y = pos.Y;
-  if(start->Y > 0) {
-    offset += con->console_size.X;
-    length += con->console_size.X;
-    start->Y -= 1;
-  }
-  
-  if(start->Y + 1 < con->console_size.Y) {
-    length += con->console_size.X;
-  }
-  
-  screen = allocate_memory(sizeof(wchar_t) * length);
-  if(!screen) {
-    con->error = "allocate_memory";
-    return FALSE;
-  }
-  
-  if(console_read_output_character(con->output_handle, screen, length, *start, &num_read)) {
-    int s = console_get_word_start(screen, length, pos.X + offset);
-    int e = console_get_word_end(screen, length, pos.X + offset);
-    
-    if(s < offset) {
-      while(s < offset && iswspace(screen[s]))
-        ++s;
-    }
-    
-    if(e > offset + con->console_size.X) {
-      while(e > offset + con->console_size.X && iswspace(screen[e - 1]))
-        --e;
-    }
-    
-    end->Y = start->Y + e / con->console_size.X;
-    end->X = start->X + e % con->console_size.X;
-    
-    start->Y += s / con->console_size.X;
-    start->X += s % con->console_size.X;
-    
-    free_memory(screen);
-    return TRUE;
-  }
-  
-  free_memory(screen);
-  return FALSE;
-}
-
 static COORD make_nonempty_output_selection_left(struct console_input_t *con, COORD new_pos) {
   assert(con != NULL);
   if(con->error)
@@ -1155,7 +1087,7 @@ static void extend_output_selection_left(struct console_input_t *con, BOOL jump_
   
   if(jump_word) {
     COORD dummy;
-    if(!get_screen_word_start_end(con, new_pos, &new_pos, &dummy))
+    if(!console_get_screen_word_start_end(con->output_handle, new_pos, &new_pos, &dummy))
       return;
   }
   
@@ -1175,7 +1107,7 @@ static void extend_output_selection_right(struct console_input_t *con, BOOL jump
   
   if(jump_word) {
     COORD dummy;
-    if(!get_screen_word_start_end(con, new_pos, &dummy, &new_pos))
+    if(!console_get_screen_word_start_end(con->output_handle, new_pos, &dummy, &new_pos))
       return;
   }
   else if(new_pos.X + 1 < con->console_size.X) {
@@ -1888,7 +1820,7 @@ static void handle_lbutton_double_click(struct console_input_t *con, const MOUSE
     COORD start;
     COORD end;
     
-    if(get_screen_word_start_end(con, er->dwMousePosition, &start, &end)) {
+    if(console_get_screen_word_start_end(con->output_handle, er->dwMousePosition, &start, &end)) {
       reselect_output(con, end, start);
     }
   }
