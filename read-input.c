@@ -360,6 +360,8 @@ static int get_input_position_from_screen_position(struct console_input_t *con, 
     while(index > con->output_size)
       index -= con->console_size.X;
   }
+  else if(index <= con->prompt_size)
+    return -1;
   
   return get_input_position_from_output_position(con, index);
 }
