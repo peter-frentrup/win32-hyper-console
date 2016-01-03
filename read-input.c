@@ -5,6 +5,7 @@
 #include "hyperlink-output.h"
 #include "console-buffer-io.h"
 #include "debug.h"
+#include "text-util.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -107,8 +108,6 @@ static BOOL have_selected_output(struct console_input_t *con);
 static void select_all_output(struct console_input_t *con);
 static void reselect_output(struct console_input_t *con, COORD pos, COORD anchor);
 
-static int get_word_start(const wchar_t *text, int text_length, int pos);
-static int get_word_end(const wchar_t *text, int text_length, int pos);
 static BOOL get_screen_word_start_end(struct console_input_t *con, COORD pos, COORD *start, COORD *end);
 
 static COORD make_nonempty_output_selection_left(struct console_input_t *con, COORD new_pos);
@@ -1024,52 +1023,6 @@ static void reselect_output(struct console_input_t *con, COORD pos, COORD anchor
   con->output_selection_pos = pos;
 }
 
-static int get_word_start(const wchar_t *text, int text_length, int pos) {
-  assert(pos >= 0);
-  assert(pos <= text_length);
-  
-  if(pos > 0) {
-    if(iswalpha(text[pos])) {
-      while(pos > 0 && iswalpha(text[pos - 1]))
-        --pos;
-    }
-    else if(iswdigit(text[pos])) {
-      while(pos > 0 && iswdigit(text[pos - 1]))
-        --pos;
-    }
-    else if(iswspace(text[pos])) {
-      while(pos > 0 && iswspace(text[pos - 1]))
-        --pos;
-    }
-  }
-  
-  return pos;
-}
-
-static int get_word_end(const wchar_t *text, int text_length, int pos) {
-  assert(pos >= 0);
-  assert(pos <= text_length);
-  
-  if(pos < text_length) {
-    if(iswalpha(text[pos])) {
-      while(pos < text_length && iswalpha(text[pos + 1]))
-        ++pos;
-    }
-    else if(iswdigit(text[pos])) {
-      while(pos < text_length && iswdigit(text[pos + 1]))
-        ++pos;
-    }
-    else if(iswspace(text[pos])) {
-      while(pos < text_length && iswspace(text[pos + 1]))
-        ++pos;
-    }
-    
-    return pos + 1;
-  }
-  
-  return pos;
-}
-
 static BOOL get_screen_word_start_end(struct console_input_t *con, COORD pos, COORD *start, COORD *end) {
   int length;
   int offset;
@@ -1109,8 +1062,8 @@ static BOOL get_screen_word_start_end(struct console_input_t *con, COORD pos, CO
   }
   
   if(console_read_output_character(con->output_handle, screen, length, *start, &num_read)) {
-    int s = get_word_start(screen, length, pos.X + offset);
-    int e = get_word_end(screen, length, pos.X + offset);
+    int s = console_get_word_start(screen, length, pos.X + offset);
+    int e = console_get_word_end(screen, length, pos.X + offset);
     
     if(s < offset) {
       while(s < offset && iswspace(screen[s]))
@@ -1118,7 +1071,7 @@ static BOOL get_screen_word_start_end(struct console_input_t *con, COORD pos, CO
     }
     
     if(e > offset + con->console_size.X) {
-      while(e > offset + con->console_size.X && iswspace(screen[e-1]))
+      while(e > offset + con->console_size.X && iswspace(screen[e - 1]))
         --e;
     }
     
@@ -1141,7 +1094,7 @@ static COORD make_nonempty_output_selection_left(struct console_input_t *con, CO
   if(con->error)
     return new_pos;
     
-  /* Prevent empty selection because that would terminate output selection mode. 
+  /* Prevent empty selection because that would terminate output selection mode.
      So jump one character more to the left.
    */
   if(new_pos.X == con->output_selection_anchor.X && new_pos.Y == con->output_selection_anchor.Y) {
@@ -1165,7 +1118,7 @@ static COORD make_nonempty_output_selection_right(struct console_input_t *con, C
   if(con->error)
     return new_pos;
     
-  /* Prevent empty selection because that would terminate output selection mode. 
+  /* Prevent empty selection because that would terminate output selection mode.
      So jump one character more to the right.
    */
   if(new_pos.X == con->output_selection_anchor.X && new_pos.Y == con->output_selection_anchor.Y) {
@@ -1316,7 +1269,7 @@ static void move_left(struct console_input_t *con, BOOL fix_anchor, BOOL jump_wo
     new_pos--;
     
   if(jump_word)
-    new_pos = get_word_start(con->input_text, con->input_length, new_pos);
+    new_pos = console_get_word_start(con->input_text, con->input_length, new_pos);
     
   if(fix_anchor) {
     reselect_input(con, new_pos, con->input_anchor);
@@ -1340,7 +1293,7 @@ static void move_right(struct console_input_t *con, BOOL fix_anchor, BOOL jump_w
     
   new_pos = con->input_pos;
   if(jump_word)
-    new_pos = get_word_end(con->input_text, con->input_length, con->input_pos);
+    new_pos = console_get_word_end(con->input_text, con->input_length, con->input_pos);
   else
     new_pos = con->input_pos + 1;
     
@@ -1923,8 +1876,8 @@ static void handle_lbutton_double_click(struct console_input_t *con, const MOUSE
   i = get_input_position_from_screen_position(con, er->dwMousePosition, FALSE);
   
   if(i >= 0) {
-    int s = get_word_start(con->input_text, con->input_length, i);
-    int e = get_word_end(con->input_text, con->input_length, i);
+    int s = console_get_word_start(con->input_text, con->input_length, i);
+    int e = console_get_word_end(con->input_text, con->input_length, i);
     
     con->input_anchor = s;
     con->input_pos = e;

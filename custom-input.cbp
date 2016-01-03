@@ -61,6 +61,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="scroll-counter.h" />
+		<Unit filename="text-util.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="text-util.h" />
 		<Extensions>
 			<code_completion />
 			<debugger />
