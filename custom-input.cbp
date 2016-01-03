@@ -49,6 +49,10 @@
 		<Unit filename="main.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="mark-mode.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="mark-mode.h" />
 		<Unit filename="memory-util.c">
 			<Option compilerVar="CC" />
 		</Unit>

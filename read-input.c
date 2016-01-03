@@ -5,6 +5,7 @@
 #include "hyperlink-output.h"
 #include "console-buffer-io.h"
 #include "debug.h"
+#include "mark-mode.h"
 #include "text-util.h"
 
 #include <assert.h>
@@ -21,12 +22,6 @@
 #define MIN(A, B)  ((A) < (B) ? (A) : (B))
 #define MAX(A, B)  ((A) > (B) ? (A) : (B))
 
-
-enum mouse_capture_t {
-  MOUSE_CAPTURE_NONE,
-  MOUSE_CAPTURE_INPUT_SELECTION,
-  MOUSE_CAPTURE_OUTPUT_SELECTION
-};
 
 struct console_input_t {
   HANDLE input_handle;
@@ -63,16 +58,12 @@ struct console_input_t {
   const char *error;
   int dirty_lines;
   
-  COORD output_selection_anchor;
-  COORD output_selection_pos;
-  
-  enum mouse_capture_t mouse_capture;
-  
   unsigned use_position_dependent_coloring: 1;
   unsigned have_colored_fences: 1;
   unsigned multiline_mode: 1;
   unsigned stop: 1;
   unsigned ignore_input_when_stopped: 1;
+  unsigned redo_in_mark_mode: 1;
 };
 
 static BOOL is_console(HANDLE handle);
@@ -101,18 +92,6 @@ static BOOL insert_input_text(struct console_input_t *con, int pos, const  wchar
 static BOOL insert_input_char(struct console_input_t *con, int pos, wchar_t ch);
 static BOOL delete_input_text(struct console_input_t *con, int pos, int length);
 
-static BOOL have_selected_output(struct console_input_t *con);
-static void select_all_output(struct console_input_t *con);
-static void reselect_output(struct console_input_t *con, COORD pos, COORD anchor);
-
-static COORD make_nonempty_output_selection_left(struct console_input_t *con, COORD new_pos);
-static COORD make_nonempty_output_selection_right(struct console_input_t *con, COORD new_pos);
-
-static void extend_output_selection_left(struct console_input_t *con, BOOL jump_word);
-static void extend_output_selection_right(struct console_input_t *con, BOOL jump_word);
-static void extend_output_selection_up(struct console_input_t *con);
-static void extend_output_selection_down(struct console_input_t *con);
-
 static void reselect_input(struct console_input_t *con, int new_pos, int new_anchor);
 static void move_left(struct console_input_t *con, BOOL fix_anchor, BOOL jump_word);
 static void move_right(struct console_input_t *con, BOOL fix_anchor, BOOL jump_word);
@@ -121,15 +100,11 @@ static void move_end(struct console_input_t *con, BOOL fix_anchor);
 
 static BOOL delete_selection_no_update(struct console_input_t *con);
 static void copy_to_clipboard(struct console_input_t *con);
-static void copy_output_to_clipboard(struct console_input_t *con);
-
-static BOOL handle_output_selection_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er);
 
 static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er);
 static void handle_key_event(struct console_input_t *con, const KEY_EVENT_RECORD *er);
 
 static void handle_lbutton_down(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
-static void handle_mouse_up(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
 static void handle_lbutton_move(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
 static void handle_lbutton_double_click(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
 static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
@@ -344,7 +319,7 @@ static int get_input_position_from_screen_position(struct console_input_t *con, 
     while(index > con->output_size)
       index -= con->console_size.X;
   }
-  else if(index <= con->prompt_size)
+  else if(index < con->prompt_size)
     return -1;
     
   return get_input_position_from_output_position(con, index);
@@ -908,178 +883,6 @@ static BOOL delete_input_text(struct console_input_t *con, int pos, int length) 
   return TRUE;
 }
 
-static BOOL have_selected_output(struct console_input_t *con) {
-
-  assert(con != NULL);
-  
-  return con->output_selection_anchor.X != con->output_selection_pos.X
-      || con->output_selection_anchor.Y != con->output_selection_pos.Y;
-}
-
-static void select_all_output(struct console_input_t *con) {
-  COORD start;
-  COORD end;
-  
-  start.X = 0;
-  start.Y = 0;
-  end.X = 0;
-  end.Y = con->console_size.Y;
-  
-  reselect_output(con, start, end);
-}
-
-static void reselect_output(struct console_input_t *con, COORD pos, COORD anchor) {
-  assert(con != NULL);
-  
-  console_reinvert_colors(
-      con->output_handle,
-      con->output_selection_anchor,
-      con->output_selection_pos,
-      anchor,
-      pos);
-      
-  con->output_selection_anchor = anchor;
-  con->output_selection_pos = pos;
-}
-
-static COORD make_nonempty_output_selection_left(struct console_input_t *con, COORD new_pos) {
-  assert(con != NULL);
-  if(con->error)
-    return new_pos;
-    
-  /* Prevent empty selection because that would terminate output selection mode.
-     So jump one character more to the left.
-   */
-  if(new_pos.X == con->output_selection_anchor.X && new_pos.Y == con->output_selection_anchor.Y) {
-    if(new_pos.X > 0) {
-      new_pos.X--;
-    }
-    else if(new_pos.Y > 0) {
-      new_pos.Y--;
-      new_pos.X = con->console_size.X - 1;
-    }
-    else {
-      new_pos.X++;
-    }
-  }
-  
-  return new_pos;
-}
-
-static COORD make_nonempty_output_selection_right(struct console_input_t *con, COORD new_pos) {
-  assert(con != NULL);
-  if(con->error)
-    return new_pos;
-    
-  /* Prevent empty selection because that would terminate output selection mode.
-     So jump one character more to the right.
-   */
-  if(new_pos.X == con->output_selection_anchor.X && new_pos.Y == con->output_selection_anchor.Y) {
-    if(new_pos.X < con->console_size.X) {
-      new_pos.X++;
-    }
-    else if(new_pos.Y < con->console_size.Y) {
-      new_pos.Y++;
-      new_pos.X = 1;
-    }
-    else {
-      new_pos.X--;
-    }
-  }
-  
-  return new_pos;
-}
-
-static void extend_output_selection_left(struct console_input_t *con, BOOL jump_word) {
-  COORD new_pos;
-  
-  assert(con != NULL);
-  if(con->error)
-    return;
-    
-  new_pos = con->output_selection_pos;
-  if(new_pos.X > 0) {
-    new_pos.X--;
-  }
-  else if(new_pos.Y > 0) {
-    new_pos.Y--;
-    new_pos.X = con->console_size.X - 1;
-  }
-  
-  if(jump_word) {
-    COORD dummy;
-    if(!console_get_screen_word_start_end(con->output_handle, new_pos, &new_pos, &dummy))
-      return;
-  }
-  
-  new_pos = make_nonempty_output_selection_left(con, new_pos);
-  
-  reselect_output(con, new_pos, con->output_selection_anchor);
-}
-
-static void extend_output_selection_right(struct console_input_t *con, BOOL jump_word) {
-  COORD new_pos;
-  
-  assert(con != NULL);
-  if(con->error)
-    return;
-    
-  new_pos = con->output_selection_pos;
-  
-  if(jump_word) {
-    COORD dummy;
-    if(!console_get_screen_word_start_end(con->output_handle, new_pos, &dummy, &new_pos))
-      return;
-  }
-  else if(new_pos.X + 1 < con->console_size.X) {
-    new_pos.X++;
-  }
-  else if(new_pos.Y < con->console_size.Y) {
-    new_pos.Y++;
-    new_pos.X = 0;
-  }
-  
-  new_pos = make_nonempty_output_selection_right(con, new_pos);
-  
-  reselect_output(con, new_pos, con->output_selection_anchor);
-}
-
-static void extend_output_selection_up(struct console_input_t *con) {
-  COORD new_pos;
-  
-  assert(con != NULL);
-  if(con->error)
-    return;
-    
-  new_pos = con->output_selection_pos;
-  if(new_pos.Y > 0)
-    new_pos.Y--;
-  else if(new_pos.X > 0)
-    new_pos.X = 0;
-    
-  new_pos = make_nonempty_output_selection_left(con, new_pos);
-  
-  reselect_output(con, new_pos, con->output_selection_anchor);
-}
-
-static void extend_output_selection_down(struct console_input_t *con) {
-  COORD new_pos;
-  
-  assert(con != NULL);
-  if(con->error)
-    return;
-    
-  new_pos = con->output_selection_pos;
-  if(new_pos.Y + 1 < con->console_size.Y)
-    new_pos.Y++;
-  else if(new_pos.X < con->console_size.X)
-    new_pos.X = con->console_size.X;
-    
-  new_pos = make_nonempty_output_selection_right(con, new_pos);
-  
-  reselect_output(con, new_pos, con->output_selection_anchor);
-}
-
 static void reselect_input(struct console_input_t *con, int new_pos, int new_anchor) {
   BOOL need_redraw;
   
@@ -1235,126 +1038,6 @@ static void copy_to_clipboard(struct console_input_t *con) {
   CloseClipboard();
 }
 
-static wchar_t *cat_console_line(
-    struct console_input_t *con,
-    wchar_t *buffer,
-    wchar_t *buffer_end,
-    COORD start,
-    int length
-) {
-  DWORD dummy_read_count;
-  wchar_t *s;
-  
-  assert(con != NULL);
-  if(con->error)
-    return buffer;
-    
-  assert(buffer != NULL);
-  assert(buffer_end != NULL);
-  assert(buffer < buffer_end);
-  assert(length + 2 < buffer_end - buffer);
-  assert(length >= 0);
-  
-  if(length == 0) {
-    *buffer = L'\0';
-    return buffer;
-  }
-  
-  console_read_output_character(
-      con->output_handle,
-      buffer,
-      length,
-      start,
-      &dummy_read_count);
-      
-  s = buffer + length;
-  if(s[-1] == L' ') {
-    while(s > buffer && s[-1] == L' ')
-      --s;
-  }
-  
-  if(s == buffer || s - buffer + start.X + 1 < con->console_size.X) {
-    *s++ = L'\r';
-    *s++ = L'\n';
-  }
-  
-  *s = L'\0';
-  return s;
-}
-
-static void copy_output_to_clipboard(struct console_input_t *con) {
-  COORD start;
-  COORD end;
-  int length;
-  int index_a;
-  int index_b;
-  wchar_t *str;
-  int max_length;
-  wchar_t *s;
-  
-  assert(con != NULL);
-  
-  index_a = con->output_selection_anchor.Y * con->console_size.X + con->output_selection_anchor.X;
-  index_b = con->output_selection_pos.Y * con->console_size.X + con->output_selection_pos.X;
-  
-  if(index_a < index_b) {
-    start.X = con->output_selection_anchor.X;
-    start.Y = con->output_selection_anchor.Y;
-    end.X = con->output_selection_pos.X;
-    end.Y = con->output_selection_pos.Y;
-    length = index_b - index_a;
-  }
-  else {
-    start.X = con->output_selection_pos.X;
-    start.Y = con->output_selection_pos.Y;
-    end.X = con->output_selection_anchor.X;
-    end.Y = con->output_selection_anchor.Y;
-    length = index_a - index_b;
-  }
-  
-  max_length = length + 2 * (end.Y - start.Y + 1) + 1;
-  str = allocate_memory(sizeof(wchar_t) * max_length);
-  if(!str)
-    return;
-    
-  s = str;
-  while(start.Y < end.Y) {
-    s = cat_console_line(con, s, str + max_length, start, con->console_size.X - start.X);
-    
-    start.X = 0;
-    start.Y++;
-  }
-  
-  s = cat_console_line(con, s, str + max_length, start, end.X - start.X);
-  
-  while(str + 2 <= s && s[-2] == L'\r' && s[-1] == L'\n')
-    s -= 2;
-    
-  *s = L'\0';
-  
-  
-  if(OpenClipboard(NULL)) {
-    void *copy_data;
-    HGLOBAL copy_handle = GlobalAlloc(GMEM_MOVEABLE, (s - str + 1) * sizeof(wchar_t));
-    
-    if(!copy_handle) {
-      free_memory(str);
-      CloseClipboard();
-      return;
-    }
-    
-    copy_data = GlobalLock(copy_handle);
-    memcpy(copy_data, str, (s - str + 1) * sizeof(wchar_t));
-    GlobalUnlock(copy_handle);
-    
-    SetClipboardData(CF_UNICODETEXT, copy_handle);
-    
-    CloseClipboard();
-  }
-  
-  free_memory(str);
-}
-
 static void change_console_size(struct console_input_t *con, int delta_columns) {
   CONSOLE_SCREEN_BUFFER_INFOEX csbiex;
   SMALL_RECT rect;
@@ -1399,79 +1082,9 @@ static void change_console_size(struct console_input_t *con, int delta_columns) 
 //  }
 }
 
-static BOOL handle_output_selection_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er) {
-  if(!have_selected_output(con))
-    return FALSE;
-    
-  switch(er->wVirtualKeyCode) {
-    case VK_CONTROL:
-    case VK_SHIFT:
-    case VK_MENU:
-      return TRUE;
-      
-    case VK_ESCAPE:
-      reselect_output(con, con->output_selection_pos, con->output_selection_pos);
-      return TRUE;
-      
-    case 'A': // Ctrl+A
-      if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
-        select_all_output(con);
-        return TRUE;
-      }
-      break;
-      
-    case 'C': // Ctrl+C
-    case 'X': // Ctrl+X
-      if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
-        copy_output_to_clipboard(con);
-        reselect_output(con, con->output_selection_pos, con->output_selection_pos);
-        return TRUE;
-      }
-      break;
-      
-    case VK_LEFT:
-      if(er->dwControlKeyState & SHIFT_PRESSED) {
-        extend_output_selection_left(
-            con,
-            er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
-        return TRUE;
-      }
-      break;
-      
-    case VK_RIGHT:
-      if(er->dwControlKeyState & SHIFT_PRESSED) {
-        extend_output_selection_right(
-            con,
-            er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
-        return TRUE;
-      }
-      break;
-      
-    case VK_UP:
-      if(er->dwControlKeyState & SHIFT_PRESSED) {
-        extend_output_selection_up(con);
-        return TRUE;
-      }
-      break;
-      
-    case VK_DOWN:
-      if(er->dwControlKeyState & SHIFT_PRESSED) {
-        extend_output_selection_down(con);
-        return TRUE;
-      }
-      break;
-  }
-  
-  reselect_output(con, con->output_selection_pos, con->output_selection_pos);
-  return FALSE;
-}
-
 static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er) {
   assert(con != NULL);
   
-  if(handle_output_selection_key_down(con, er))
-    return;
-    
   switch(er->wVirtualKeyCode) {
     case VK_RETURN:
       if(con->multiline_mode) {
@@ -1542,7 +1155,7 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
     case 'A': // Ctrl+A
       if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
         if(abs(con->input_anchor - con->input_pos) == con->input_length) {
-          select_all_output(con);
+          con->redo_in_mark_mode = TRUE;
         }
         else {
           reselect_input(con, con->input_length, 0);
@@ -1638,17 +1251,11 @@ static void handle_lbutton_down(struct console_input_t *con, const MOUSE_EVENT_R
   assert(con != NULL);
   assert(er != NULL);
   
-  i = get_input_position_from_screen_position(con, er->dwMousePosition, FALSE);
+  i = get_input_position_from_screen_position(con, er->dwMousePosition, TRUE);
   
-  if(i < 0) {
-    con->mouse_capture = MOUSE_CAPTURE_OUTPUT_SELECTION;
-    
-    reselect_output(con, er->dwMousePosition, er->dwMousePosition);
-  }
-  else {
+  if(i >= 0) {
     BOOL need_redraw = (con->input_anchor != con->input_pos);
     
-    con->mouse_capture = MOUSE_CAPTURE_INPUT_SELECTION;
     con->input_pos = i;
     con->input_anchor = i;
     
@@ -1659,41 +1266,16 @@ static void handle_lbutton_down(struct console_input_t *con, const MOUSE_EVENT_R
   }
 }
 
-static void handle_mouse_up(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
-  assert(con != NULL);
-  assert(er != NULL);
-  
-  switch(con->mouse_capture) {
-    case MOUSE_CAPTURE_INPUT_SELECTION:
-    case MOUSE_CAPTURE_OUTPUT_SELECTION:
-    case MOUSE_CAPTURE_NONE:
-      break;
-  }
-  
-  con->mouse_capture = MOUSE_CAPTURE_NONE;
-}
-
 static void handle_lbutton_move(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
   int i;
   
   assert(con != NULL);
   assert(er != NULL);
   
-  switch(con->mouse_capture) {
-    case MOUSE_CAPTURE_INPUT_SELECTION:
-      i = get_input_position_from_screen_position(con, er->dwMousePosition, TRUE);
-      if(i >= 0 && i != con->input_pos) {
-        con->input_pos = i;
-        update_output(con);
-      }
-      return;
-      
-    case MOUSE_CAPTURE_OUTPUT_SELECTION:
-      reselect_output(con, er->dwMousePosition, con->output_selection_anchor);
-      return;
-      
-    case MOUSE_CAPTURE_NONE:
-      break;
+  i = get_input_position_from_screen_position(con, er->dwMousePosition, TRUE);
+  if(i >= 0 && i != con->input_pos) {
+    con->input_pos = i;
+    update_output(con);
   }
 }
 
@@ -1716,14 +1298,6 @@ static void handle_lbutton_double_click(struct console_input_t *con, const MOUSE
     
     update_output(con);
   }
-  else {
-    COORD start;
-    COORD end;
-    
-    if(console_get_screen_word_start_end(con->output_handle, er->dwMousePosition, &start, &end)) {
-      reselect_output(con, end, start);
-    }
-  }
 }
 
 static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
@@ -1737,9 +1311,6 @@ static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RE
       if(er->dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) {
         handle_lbutton_down(con, er);
         return;
-      }
-      else if(er->dwButtonState == 0) {
-        handle_mouse_up(con, er);
       }
       break;
       
@@ -1867,11 +1438,6 @@ static BOOL is_mouse_event_inside_edit_region(struct console_input_t *con, INPUT
 static void finish_input(struct console_input_t *con) {
   assert(con != NULL);
   
-  reselect_output(
-      con,
-      con->output_selection_anchor,
-      con->output_selection_anchor);
-      
   if(con->error)
     return;
     
@@ -1915,31 +1481,45 @@ static BOOL input_loop(struct console_input_t *con) {
     if(!is_mouse_event_inside_edit_region(con, &event)) {
       if(hyperlink_system_handle_events(&event))
         continue;
+        
+      if(console_handle_mark_mode(con->input_handle, con->output_handle, &event, FALSE))
+        continue;
     }
     
-    switch(event.EventType) {
-      case KEY_EVENT:
-        handle_key_event(con, &event.Event.KeyEvent);
-        break;
+    for(;;) {
+      switch(event.EventType) {
+        case KEY_EVENT:
+          handle_key_event(con, &event.Event.KeyEvent);
+          break;
+          
+        case MOUSE_EVENT:
+          handle_mouse_event(con, &event.Event.MouseEvent);
+          break;
+          
+        case WINDOW_BUFFER_SIZE_EVENT: // scrn buf. resizing
+          handle_window_buffer_size_event(con, &event.Event.WindowBufferSizeEvent);
+          break;
+          
+        case FOCUS_EVENT:
+          handle_focus_event(con, &event.Event.FocusEvent);
+          break;
+          
+        case MENU_EVENT:   // disregard menu events
+          handle_menu_event(con, &event.Event.MenuEvent);
+          break;
+          
+        default:
+          handle_unknown_event(con, &event);
+          break;
+      }
+      
+      if(con->redo_in_mark_mode) {
+        con->redo_in_mark_mode = FALSE;
         
-      case MOUSE_EVENT:
-        handle_mouse_event(con, &event.Event.MouseEvent);
-        break;
-        
-      case WINDOW_BUFFER_SIZE_EVENT: // scrn buf. resizing
-        handle_window_buffer_size_event(con, &event.Event.WindowBufferSizeEvent);
-        break;
-        
-      case FOCUS_EVENT:
-        handle_focus_event(con, &event.Event.FocusEvent);
-        break;
-        
-      case MENU_EVENT:   // disregard menu events
-        handle_menu_event(con, &event.Event.MenuEvent);
-        break;
-        
-      default:
-        handle_unknown_event(con, &event);
+        if(console_handle_mark_mode(con->input_handle, con->output_handle, &event, TRUE))
+          break;
+      }
+      else
         break;
     }
   }
