@@ -8,6 +8,17 @@
 #define MAX_BUFFER 512
 
 
+struct send_input_t {
+  HANDLE input_handle;
+  
+  INPUT_RECORD input_records[128];
+  DWORD counter;
+};
+
+static BOOL flush_input(struct send_input_t *context);
+static BOOL send_input(struct send_input_t *context, wchar_t ch);
+
+
 BOOL console_read_output_character(
     HANDLE hConsoleOutput,
     LPWSTR lpCharacter,
@@ -332,4 +343,119 @@ BOOL console_scroll_wheel(HANDLE hConsoleOutput, const MOUSE_EVENT_RECORD *er) {
   }
   
   return FALSE;
+}
+
+
+static BOOL flush_input(struct send_input_t *context) {
+  DWORD written;
+  
+  assert(context != NULL);
+    
+  assert(context->counter >= 0);
+  assert(context->counter <= sizeof(context->input_records) / sizeof(INPUT_RECORD));
+  
+  if(!WriteConsoleInputW(context->input_handle, context->input_records, context->counter, &written)) {
+    debug_printf(L"flush_input: WriteConsoleInputW failed\n");
+    context->counter = 0;
+    return FALSE;
+  }
+  
+  context->counter = 0;
+  return TRUE;
+}
+
+static BOOL send_input(struct send_input_t *context, wchar_t ch) {
+  SHORT vk_mode;
+  
+  assert(context != NULL);
+  assert(context->counter >= 0);
+  
+  if(context->counter + 2 > sizeof(context->input_records) / sizeof(INPUT_RECORD)) {
+    if(!flush_input(context))
+      return FALSE;
+  }
+  
+  //BOOL shift;
+  //BOOL ctrl;
+  //BOOL alt;
+  
+  //if(ch == L'\r' && copy_data[1] == L'\n')
+  //  ++copy_data;
+  //else if(ch == L'\n')
+  //  ch = L'\r';
+  //else if(ch == L'\t')
+  //  ch = L' ';
+  
+  vk_mode = VkKeyScanW(ch);
+  //shift = (vk_mode & 0x0100) != 0;
+  //ctrl  = (vk_mode & 0x0200) != 0;
+  //alt   = (vk_mode & 0x0400) != 0;
+  
+  context->input_records[context->counter].EventType = KEY_EVENT;
+  context->input_records[context->counter].Event.KeyEvent.bKeyDown = TRUE;
+  context->input_records[context->counter].Event.KeyEvent.dwControlKeyState = 0;// (shift ? SHIFT_PRESSED : 0) | (ctrl ? LEFT_CTRL_PRESSED : 0) | (alt ? LEFT_ALT_PRESSED : 0);
+  context->input_records[context->counter].Event.KeyEvent.uChar.UnicodeChar = ch;
+  context->input_records[context->counter].Event.KeyEvent.wRepeatCount = 1;
+  context->input_records[context->counter].Event.KeyEvent.wVirtualKeyCode = LOBYTE(vk_mode);
+  context->input_records[context->counter].Event.KeyEvent.wVirtualScanCode = MapVirtualKeyW(LOBYTE(vk_mode), MAPVK_VK_TO_VSC);
+  context->counter++;
+  
+  context->input_records[context->counter] = context->input_records[context->counter - 1];
+  context->input_records[context->counter].Event.KeyEvent.bKeyDown = FALSE;
+  context->counter++;
+  
+  return TRUE;
+}
+
+void console_paste_from_clipboard(HANDLE hConsoleInput) {
+  HGLOBAL copy_handle;
+  wchar_t *copy_data;
+  
+  if(!IsClipboardFormatAvailable(CF_UNICODETEXT))
+    return;
+    
+  if(!OpenClipboard(NULL))
+    return;
+    
+  copy_handle = GetClipboardData(CF_UNICODETEXT);
+  if(copy_handle) {
+    copy_data = GlobalLock(copy_handle);
+    if(copy_data) {
+      struct send_input_t context[1];
+      
+      context->input_handle = hConsoleInput;
+      context->counter = 0;
+      
+      for(; *copy_data; ++copy_data) {
+        wchar_t ch = *copy_data;
+        
+        if(ch == L'\r' && copy_data[1] == L'\n') {
+          send_input(context, L'\r');
+          ++copy_data;
+          continue;
+        }
+        
+        if(ch == L'\n') {
+          send_input(context, L'\r');
+          continue;
+        }
+        
+        if(ch == L'\t') {
+          send_input(context, L' ');
+          send_input(context, L' ');
+          send_input(context, L' ');
+          send_input(context, L' ');
+          continue;
+        }
+        
+        send_input(context, ch);
+      }
+      
+      flush_input(context);
+    }
+    
+    GlobalUnlock(copy_handle);
+  }
+  
+  CloseClipboard();
 }

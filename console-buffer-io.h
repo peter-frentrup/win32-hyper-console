@@ -27,4 +27,7 @@ void console_reinvert_colors(
 void console_clean_lines(HANDLE hConsoleOutput, int num_lines);
 
 BOOL console_scroll_wheel(HANDLE hConsoleOutput, const MOUSE_EVENT_RECORD *er);
+
+void console_paste_from_clipboard(HANDLE hConsoleInput);
+
 #endif // __CONSOLE_BUFFER_IO_H__

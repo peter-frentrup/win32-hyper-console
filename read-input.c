@@ -75,12 +75,6 @@ struct console_input_t {
   unsigned ignore_input_when_stopped: 1;
 };
 
-struct send_input_t {
-  struct console_input_t *con;
-  INPUT_RECORD input_records[128];
-  DWORD counter;
-};
-
 static BOOL is_console(HANDLE handle);
 static BOOL init_console(struct console_input_t *con);
 static BOOL init_buffer(struct console_input_t *con);
@@ -134,11 +128,6 @@ static void move_end(struct console_input_t *con, BOOL fix_anchor);
 static BOOL delete_selection_no_update(struct console_input_t *con);
 static void copy_to_clipboard(struct console_input_t *con);
 static void copy_output_to_clipboard(struct console_input_t *con);
-
-static BOOL flush_input(struct send_input_t *context);
-static BOOL send_input(struct send_input_t *context, wchar_t ch);
-
-static void paste_from_clipboard(struct console_input_t *con);
 
 static BOOL handle_output_selection_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er);
 
@@ -1560,134 +1549,6 @@ static void copy_output_to_clipboard(struct console_input_t *con) {
   free_memory(str);
 }
 
-static BOOL flush_input(struct send_input_t *context) {
-  DWORD written;
-  
-  assert(context != NULL);
-  assert(context->con != NULL);
-  if(context->con->error)
-    return FALSE;
-    
-  assert(context->counter >= 0);
-  assert(context->counter <= sizeof(context->input_records) / sizeof(INPUT_RECORD));
-  
-  if(!WriteConsoleInputW(context->con->input_handle, context->input_records, context->counter, &written)) {
-    context->con->error = "WriteConsoleInputW";
-    context->counter = 0;
-    return FALSE;
-  }
-  
-  context->counter = 0;
-  return TRUE;
-}
-
-static BOOL send_input(struct send_input_t *context, wchar_t ch) {
-  SHORT vk_mode;
-  
-  assert(context != NULL);
-  assert(context->counter >= 0);
-  
-  if(context->counter + 2 > sizeof(context->input_records) / sizeof(INPUT_RECORD)) {
-    if(!flush_input(context))
-      return FALSE;
-  }
-  
-  //BOOL shift;
-  //BOOL ctrl;
-  //BOOL alt;
-  
-  //if(ch == L'\r' && copy_data[1] == L'\n')
-  //  ++copy_data;
-  //else if(ch == L'\n')
-  //  ch = L'\r';
-  //else if(ch == L'\t')
-  //  ch = L' ';
-  
-  vk_mode = VkKeyScanW(ch);
-  //shift = (vk_mode & 0x0100) != 0;
-  //ctrl  = (vk_mode & 0x0200) != 0;
-  //alt   = (vk_mode & 0x0400) != 0;
-  
-  context->input_records[context->counter].EventType = KEY_EVENT;
-  context->input_records[context->counter].Event.KeyEvent.bKeyDown = TRUE;
-  context->input_records[context->counter].Event.KeyEvent.dwControlKeyState = 0;// (shift ? SHIFT_PRESSED : 0) | (ctrl ? LEFT_CTRL_PRESSED : 0) | (alt ? LEFT_ALT_PRESSED : 0);
-  context->input_records[context->counter].Event.KeyEvent.uChar.UnicodeChar = ch;
-  context->input_records[context->counter].Event.KeyEvent.wRepeatCount = 1;
-  context->input_records[context->counter].Event.KeyEvent.wVirtualKeyCode = LOBYTE(vk_mode);
-  context->input_records[context->counter].Event.KeyEvent.wVirtualScanCode = MapVirtualKeyW(LOBYTE(vk_mode), MAPVK_VK_TO_VSC);
-  context->counter++;
-  
-  context->input_records[context->counter] = context->input_records[context->counter - 1];
-  context->input_records[context->counter].Event.KeyEvent.bKeyDown = FALSE;
-  context->counter++;
-  
-  return TRUE;
-}
-
-static void paste_from_clipboard(struct console_input_t *con) {
-  HGLOBAL copy_handle;
-  wchar_t *copy_data;
-  
-  assert(con != NULL);
-  if(con->error)
-    return;
-    
-  if(!IsClipboardFormatAvailable(CF_UNICODETEXT))
-    return;
-    
-  if(!OpenClipboard(NULL))
-    return;
-    
-  copy_handle = GetClipboardData(CF_UNICODETEXT);
-  if(copy_handle) {
-    copy_data = GlobalLock(copy_handle);
-    if(copy_data) {
-      struct send_input_t context[1];
-      
-      context->con = con;
-      context->counter = 0;
-      
-      for(; *copy_data && !con->error; ++copy_data) {
-        wchar_t ch = *copy_data;
-        
-        if(ch == L'\r' && copy_data[1] == L'\n') {
-          send_input(context, L'\r');
-          ++copy_data;
-          continue;
-        }
-        
-        if(ch == L'\n') {
-          send_input(context, L'\r');
-          continue;
-        }
-        
-        if(ch == L'\t') {
-          send_input(context, L' ');
-          send_input(context, L' ');
-          send_input(context, L' ');
-          send_input(context, L' ');
-          continue;
-        }
-        
-        send_input(context, ch);
-      }
-      
-      flush_input(context);
-      
-      //int i = 0;
-      //while(/*copy_data[i] != L'\n' && copy_data[i] != L'\r' &&*/ copy_data[i] != L'\0')
-      //  ++i;
-      //
-      //delete_selection_no_update(con);
-      //insert_input_text(con, con->input_pos, copy_data, i);
-      //update_output(con);
-    }
-    GlobalUnlock(copy_handle);
-  }
-  
-  CloseClipboard();
-}
-
 static void change_console_size(struct console_input_t *con, int delta_columns) {
   CONSOLE_SCREEN_BUFFER_INFOEX csbiex;
   SMALL_RECT rect;
@@ -1890,7 +1751,7 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
         return;
       }
       if(er->dwControlKeyState & SHIFT_PRESSED) {
-        paste_from_clipboard(con);
+        console_paste_from_clipboard(con->input_handle);
         return;
       }
       break;
@@ -1912,7 +1773,7 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
       
     case 'V': // Ctrl+V
       if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
-        paste_from_clipboard(con);
+        console_paste_from_clipboard(con->input_handle);
         return;
       }
       break;
