@@ -4,6 +4,7 @@
 #include "memory-util.h"
 #include "hyperlink-output.h"
 #include "console-buffer-io.h"
+#include "debug.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -112,9 +113,19 @@ static BOOL have_selected_output(struct console_input_t *con);
 static void select_all_output(struct console_input_t *con);
 static void reselect_output(struct console_input_t *con, COORD pos, COORD anchor);
 
-static void reselect(struct console_input_t *con, int new_pos, int new_anchor);
-static int get_word_start(struct console_input_t *con, int pos);
-static int get_word_end(struct console_input_t *con, int pos);
+static int get_word_start(const wchar_t *text, int text_length, int pos);
+static int get_word_end(const wchar_t *text, int text_length, int pos);
+static BOOL get_screen_word_start_end(struct console_input_t *con, COORD pos, COORD *start, COORD *end);
+
+static COORD make_nonempty_output_selection_left(struct console_input_t *con, COORD new_pos);
+static COORD make_nonempty_output_selection_right(struct console_input_t *con, COORD new_pos);
+
+static void extend_output_selection_left(struct console_input_t *con, BOOL jump_word);
+static void extend_output_selection_right(struct console_input_t *con, BOOL jump_word);
+static void extend_output_selection_up(struct console_input_t *con);
+static void extend_output_selection_down(struct console_input_t *con);
+
+static void reselect_input(struct console_input_t *con, int new_pos, int new_anchor);
 static void move_left(struct console_input_t *con, BOOL fix_anchor, BOOL jump_word);
 static void move_right(struct console_input_t *con, BOOL fix_anchor, BOOL jump_word);
 static void move_home(struct console_input_t *con, BOOL fix_anchor);
@@ -1013,17 +1024,267 @@ static void reselect_output(struct console_input_t *con, COORD pos, COORD anchor
   assert(con != NULL);
   
   console_reinvert_colors(
-    con->output_handle, 
-    con->output_selection_anchor, 
-    con->output_selection_pos, 
-    anchor, 
-    pos);
-  
+      con->output_handle,
+      con->output_selection_anchor,
+      con->output_selection_pos,
+      anchor,
+      pos);
+      
   con->output_selection_anchor = anchor;
   con->output_selection_pos = pos;
 }
 
-static void reselect(struct console_input_t *con, int new_pos, int new_anchor) {
+static int get_word_start(const wchar_t *text, int text_length, int pos) {
+  assert(pos >= 0);
+  assert(pos <= text_length);
+  
+  if(pos > 0) {
+    if(iswalpha(text[pos])) {
+      while(pos > 0 && iswalpha(text[pos - 1]))
+        --pos;
+    }
+    else if(iswdigit(text[pos])) {
+      while(pos > 0 && iswdigit(text[pos - 1]))
+        --pos;
+    }
+    else if(iswspace(text[pos])) {
+      while(pos > 0 && iswspace(text[pos - 1]))
+        --pos;
+    }
+  }
+  
+  return pos;
+}
+
+static int get_word_end(const wchar_t *text, int text_length, int pos) {
+  assert(pos >= 0);
+  assert(pos <= text_length);
+  
+  if(pos < text_length) {
+    if(iswalpha(text[pos])) {
+      while(pos < text_length && iswalpha(text[pos + 1]))
+        ++pos;
+    }
+    else if(iswdigit(text[pos])) {
+      while(pos < text_length && iswdigit(text[pos + 1]))
+        ++pos;
+    }
+    else if(iswspace(text[pos])) {
+      while(pos < text_length && iswspace(text[pos + 1]))
+        ++pos;
+    }
+    
+    return pos + 1;
+  }
+  
+  return pos;
+}
+
+static BOOL get_screen_word_start_end(struct console_input_t *con, COORD pos, COORD *start, COORD *end) {
+  int length;
+  int offset;
+  wchar_t *screen;
+  DWORD num_read;
+  
+  assert(con != NULL);
+  assert(start != NULL);
+  assert(end != NULL);
+  assert(start != end);
+  
+  assert(pos.X >= 0);
+  assert(pos.Y >= 0);
+  
+  *start = *end = pos;
+  if(con->error)
+    return FALSE;
+    
+  length = con->console_size.X;
+  offset = 0;
+  start->X = 0;
+  start->Y = pos.Y;
+  if(start->Y > 0) {
+    offset += con->console_size.X;
+    length += con->console_size.X;
+    start->Y -= 1;
+  }
+  
+  if(start->Y + 1 < con->console_size.Y) {
+    length += con->console_size.X;
+  }
+  
+  screen = allocate_memory(sizeof(wchar_t) * length);
+  if(!screen) {
+    con->error = "allocate_memory";
+    return FALSE;
+  }
+  
+  if(console_read_output_character(con->output_handle, screen, length, *start, &num_read)) {
+    int s = get_word_start(screen, length, pos.X + offset);
+    int e = get_word_end(screen, length, pos.X + offset);
+    
+    if(s < offset) {
+      while(s < offset && iswspace(screen[s]))
+        ++s;
+    }
+    
+    if(e > offset + con->console_size.X) {
+      while(e > offset + con->console_size.X && iswspace(screen[e-1]))
+        --e;
+    }
+    
+    end->Y = start->Y + e / con->console_size.X;
+    end->X = start->X + e % con->console_size.X;
+    
+    start->Y += s / con->console_size.X;
+    start->X += s % con->console_size.X;
+    
+    free_memory(screen);
+    return TRUE;
+  }
+  
+  free_memory(screen);
+  return FALSE;
+}
+
+static COORD make_nonempty_output_selection_left(struct console_input_t *con, COORD new_pos) {
+  assert(con != NULL);
+  if(con->error)
+    return new_pos;
+    
+  /* Prevent empty selection because that would terminate output selection mode. 
+     So jump one character more to the left.
+   */
+  if(new_pos.X == con->output_selection_anchor.X && new_pos.Y == con->output_selection_anchor.Y) {
+    if(new_pos.X > 0) {
+      new_pos.X--;
+    }
+    else if(new_pos.Y > 0) {
+      new_pos.Y--;
+      new_pos.X = con->console_size.X - 1;
+    }
+    else {
+      new_pos.X++;
+    }
+  }
+  
+  return new_pos;
+}
+
+static COORD make_nonempty_output_selection_right(struct console_input_t *con, COORD new_pos) {
+  assert(con != NULL);
+  if(con->error)
+    return new_pos;
+    
+  /* Prevent empty selection because that would terminate output selection mode. 
+     So jump one character more to the right.
+   */
+  if(new_pos.X == con->output_selection_anchor.X && new_pos.Y == con->output_selection_anchor.Y) {
+    if(new_pos.X < con->console_size.X) {
+      new_pos.X++;
+    }
+    else if(new_pos.Y < con->console_size.Y) {
+      new_pos.Y++;
+      new_pos.X = 1;
+    }
+    else {
+      new_pos.X--;
+    }
+  }
+  
+  return new_pos;
+}
+
+static void extend_output_selection_left(struct console_input_t *con, BOOL jump_word) {
+  COORD new_pos;
+  
+  assert(con != NULL);
+  if(con->error)
+    return;
+  
+  new_pos = con->output_selection_pos;
+  if(new_pos.X > 0) {
+    new_pos.X--;
+  }
+  else if(new_pos.Y > 0) {
+    new_pos.Y--;
+    new_pos.X = con->console_size.X - 1;
+  }
+  
+  if(jump_word) {
+    COORD dummy;
+    if(!get_screen_word_start_end(con, new_pos, &new_pos, &dummy))
+      return;
+  }
+  
+  new_pos = make_nonempty_output_selection_left(con, new_pos);
+  
+  reselect_output(con, new_pos, con->output_selection_anchor);
+}
+
+static void extend_output_selection_right(struct console_input_t *con, BOOL jump_word) {
+  COORD new_pos;
+  
+  assert(con != NULL);
+  if(con->error)
+    return;
+  
+  new_pos = con->output_selection_pos;
+  
+  if(jump_word) {
+    COORD dummy;
+    if(!get_screen_word_start_end(con, new_pos, &dummy, &new_pos))
+      return;
+  }
+  else if(new_pos.X + 1 < con->console_size.X) {
+    new_pos.X++;
+  }
+  else if(new_pos.Y < con->console_size.Y) {
+    new_pos.Y++;
+    new_pos.X = 0;
+  }
+  
+  new_pos = make_nonempty_output_selection_right(con, new_pos);
+  
+  reselect_output(con, new_pos, con->output_selection_anchor);
+}
+
+static void extend_output_selection_up(struct console_input_t *con) {
+  COORD new_pos;
+  
+  assert(con != NULL);
+  if(con->error)
+    return;
+  
+  new_pos = con->output_selection_pos;
+  if(new_pos.Y > 0)
+    new_pos.Y--;
+  else if(new_pos.X > 0)
+    new_pos.X = 0;
+  
+  new_pos = make_nonempty_output_selection_left(con, new_pos);
+  
+  reselect_output(con, new_pos, con->output_selection_anchor);
+}
+
+static void extend_output_selection_down(struct console_input_t *con) {
+  COORD new_pos;
+  
+  assert(con != NULL);
+  if(con->error)
+    return;
+  
+  new_pos = con->output_selection_pos;
+  if(new_pos.Y + 1 < con->console_size.Y)
+    new_pos.Y++;
+  else if(new_pos.X < con->console_size.X)
+    new_pos.X = con->console_size.X;
+  
+  new_pos = make_nonempty_output_selection_right(con, new_pos);
+  
+  reselect_output(con, new_pos, con->output_selection_anchor);
+}
+
+static void reselect_input(struct console_input_t *con, int new_pos, int new_anchor) {
   BOOL need_redraw;
   
   assert(con != NULL);
@@ -1053,60 +1314,6 @@ static void reselect(struct console_input_t *con, int new_pos, int new_anchor) {
     set_output_cursor_position(con);
 }
 
-static int get_word_start(struct console_input_t *con, int pos) {
-  assert(con != NULL);
-  if(con->error)
-    return 0;
-    
-  assert(pos >= 0);
-  assert(pos <= con->input_length);
-  
-  if(pos > 0) {
-    if(iswalpha(con->input_text[pos])) {
-      while(pos > 0 && iswalpha(con->input_text[pos - 1]))
-        --pos;
-    }
-    else if(iswdigit(con->input_text[pos])) {
-      while(pos > 0 && iswdigit(con->input_text[pos - 1]))
-        --pos;
-    }
-    else if(iswspace(con->input_text[pos])) {
-      while(pos > 0 && iswspace(con->input_text[pos - 1]))
-        --pos;
-    }
-  }
-  
-  return pos;
-}
-
-static int get_word_end(struct console_input_t *con, int pos) {
-  assert(con != NULL);
-  if(con->error)
-    return 0;
-    
-  assert(pos >= 0);
-  assert(pos <= con->input_length);
-  
-  if(pos < con->input_length) {
-    if(iswalpha(con->input_text[pos])) {
-      while(pos < con->input_length && iswalpha(con->input_text[pos + 1]))
-        ++pos;
-    }
-    else if(iswdigit(con->input_text[pos])) {
-      while(pos < con->input_length && iswdigit(con->input_text[pos + 1]))
-        ++pos;
-    }
-    else if(iswspace(con->input_text[pos])) {
-      while(pos < con->input_length && iswspace(con->input_text[pos + 1]))
-        ++pos;
-    }
-    
-    return pos + 1;
-  }
-  
-  return pos;
-}
-
 static void move_left(struct console_input_t *con, BOOL fix_anchor, BOOL jump_word) {
   int new_pos;
   
@@ -1119,18 +1326,18 @@ static void move_left(struct console_input_t *con, BOOL fix_anchor, BOOL jump_wo
     new_pos--;
     
   if(jump_word)
-    new_pos = get_word_start(con, new_pos);
+    new_pos = get_word_start(con->input_text, con->input_length, new_pos);
     
   if(fix_anchor) {
-    reselect(con, new_pos, con->input_anchor);
+    reselect_input(con, new_pos, con->input_anchor);
   }
   else {
     if(con->input_pos < con->input_anchor)
-      reselect(con, con->input_pos, con->input_pos);
+      reselect_input(con, con->input_pos, con->input_pos);
     else if(con->input_anchor < con->input_pos)
-      reselect(con, con->input_anchor, con->input_anchor);
+      reselect_input(con, con->input_anchor, con->input_anchor);
     else
-      reselect(con, new_pos, new_pos);
+      reselect_input(con, new_pos, new_pos);
   }
 }
 
@@ -1143,35 +1350,35 @@ static void move_right(struct console_input_t *con, BOOL fix_anchor, BOOL jump_w
     
   new_pos = con->input_pos;
   if(jump_word)
-    new_pos = get_word_end(con, con->input_pos);
+    new_pos = get_word_end(con->input_text, con->input_length, con->input_pos);
   else
     new_pos = con->input_pos + 1;
     
   if(fix_anchor) {
-    reselect(con, new_pos, con->input_anchor);
+    reselect_input(con, new_pos, con->input_anchor);
   }
   else {
     if(con->input_pos > con->input_anchor)
-      reselect(con, con->input_pos, con->input_pos);
+      reselect_input(con, con->input_pos, con->input_pos);
     else if(con->input_anchor > con->input_pos)
-      reselect(con, con->input_anchor, con->input_anchor);
+      reselect_input(con, con->input_anchor, con->input_anchor);
     else
-      reselect(con, new_pos, new_pos);
+      reselect_input(con, new_pos, new_pos);
   }
 }
 
 static void move_home(struct console_input_t *con, BOOL fix_anchor) {
   if(fix_anchor)
-    reselect(con, 0, con->input_anchor);
+    reselect_input(con, 0, con->input_anchor);
   else
-    reselect(con, 0, 0);
+    reselect_input(con, 0, 0);
 }
 
 static void move_end(struct console_input_t *con, BOOL fix_anchor) {
   if(fix_anchor)
-    reselect(con, con->input_length, con->input_anchor);
+    reselect_input(con, con->input_length, con->input_anchor);
   else
-    reselect(con, con->input_length, con->input_length);
+    reselect_input(con, con->input_length, con->input_length);
 }
 
 static BOOL delete_selection_no_update(struct console_input_t *con) {
@@ -1553,6 +1760,38 @@ static BOOL handle_output_selection_key_down(struct console_input_t *con, const 
         return TRUE;
       }
       break;
+      
+    case VK_LEFT:
+      if(er->dwControlKeyState & SHIFT_PRESSED) {
+        extend_output_selection_left(
+            con,
+            er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+        return TRUE;
+      }
+      break;
+      
+    case VK_RIGHT:
+      if(er->dwControlKeyState & SHIFT_PRESSED) {
+        extend_output_selection_right(
+            con,
+            er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+        return TRUE;
+      }
+      break;
+      
+    case VK_UP:
+      if(er->dwControlKeyState & SHIFT_PRESSED) {
+        extend_output_selection_up(con);
+        return TRUE;
+      }
+      break;
+      
+    case VK_DOWN:
+      if(er->dwControlKeyState & SHIFT_PRESSED) {
+        extend_output_selection_down(con);
+        return TRUE;
+      }
+      break;
   }
   
   reselect_output(con, con->output_selection_pos, con->output_selection_pos);
@@ -1638,7 +1877,7 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
           select_all_output(con);
         }
         else {
-          reselect(con, con->input_length, 0);
+          reselect_input(con, con->input_length, 0);
         }
         return;
       }
@@ -1659,7 +1898,7 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
       if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
         if(con->input_anchor != con->input_pos) {
           copy_to_clipboard(con);
-          reselect(con, con->input_pos, con->input_pos);
+          reselect_input(con, con->input_pos, con->input_pos);
           return;
         }
         else { // empty selection -> abort edit
@@ -1838,17 +2077,36 @@ static void handle_lbutton_move(struct console_input_t *con, const MOUSE_EVENT_R
 }
 
 static void handle_lbutton_double_click(struct console_input_t *con, const MOUSE_EVENT_RECORD *er) {
-  int i = get_input_position_from_screen_position(con, er->dwMousePosition, TRUE);
+  int i;
+  
+  if(hyperlink_system_handle_mouse_event(er)) {
+    //con->mouse_capture = MOUSE_CAPTURE_HYPERLINK;
+    return;
+  }
+  
+  assert(con != NULL);
+  assert(er != NULL);
+  if(con->error)
+    return;
+    
+  i = get_input_position_from_screen_position(con, er->dwMousePosition, FALSE);
   
   if(i >= 0) {
-    int s = get_word_start(con, i);
-    int e = get_word_end(con, i);
+    int s = get_word_start(con->input_text, con->input_length, i);
+    int e = get_word_end(con->input_text, con->input_length, i);
     
     con->input_anchor = s;
     con->input_pos = e;
     
     update_output(con);
-    return;
+  }
+  else {
+    COORD start;
+    COORD end;
+    
+    if(get_screen_word_start_end(con, er->dwMousePosition, &start, &end)) {
+      reselect_output(con, end, start);
+    }
   }
 }
 
@@ -1858,6 +2116,8 @@ static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RE
   switch(er->dwEventFlags) {
     case 0:
       // button press/release
+      debug_printf(L"handle_mouse_event press/release %x\n", er->dwButtonState);
+      
       if(er->dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) {
         handle_lbutton_down(con, er);
         return;
@@ -1868,6 +2128,8 @@ static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RE
       break;
       
     case DOUBLE_CLICK:
+      debug_printf(L"handle_mouse_event DOUBLE_CLICK %x\n", er->dwButtonState);
+      
       if(er->dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) {
         handle_lbutton_double_click(con, er);
         return;
@@ -1884,9 +2146,11 @@ static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RE
       break;
       
     case MOUSE_HWHEELED:
+      
       break;
       
     case MOUSE_WHEELED:
+      
       handle_mouse_wheel(con, er);
       break;
   }
