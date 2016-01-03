@@ -655,6 +655,9 @@ static BOOL hs_handle_lbutton_down(struct hyperlink_collection_t *hc, const MOUS
   assert(hc != NULL);
   assert(er != NULL);
   
+  if(er->dwControlKeyState & SHIFT_PRESSED)
+    return FALSE;
+  
   set_mouse_over_link(hc, find_link(hc, er->dwMousePosition));
   
   if(hc->pressed_link && hc->pressed_link != hc->mouse_over_link)
@@ -695,10 +698,13 @@ static BOOL hs_handle_mouse_move(struct hyperlink_collection_t *hc, const MOUSE_
   assert(hc != NULL);
   assert(er != NULL);
   
-  if(er->dwButtonState == 0) {
+  if(er->dwControlKeyState & SHIFT_PRESSED)
+    return FALSE;
+  
+  if(er->dwButtonState == 0)
     return set_mouse_over_link(hc, find_link(hc, er->dwMousePosition));
-  }
-  else if(hc->pressed_link) {
+  
+  if(hc->pressed_link) {
     struct hyperlink_t *link = find_link(hc, er->dwMousePosition);
     
     if(link != hc->pressed_link)
