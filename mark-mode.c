@@ -5,6 +5,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <strsafe.h>
 
 
 #ifndef MOUSE_HWHEELED
@@ -27,6 +28,7 @@ struct console_mark_t {
   unsigned active: 1;
   unsigned stop: 1;
   unsigned continue_on_empty_click: 1;
+  unsigned block_mode: 1;
 };
 
 static BOOL have_selected_output(struct console_mark_t *cm);
@@ -294,8 +296,16 @@ static void start_mark_mode(struct console_mark_t *cm) {
   
   if(cm->oritinal_title == NULL) {
     cm->oritinal_title = allocate_memory(sizeof(wchar_t) * 256);
-    GetConsoleTitleW(cm->oritinal_title, 256);
-    SetConsoleTitleW(L"Mark mode");
+    if(cm->oritinal_title) {
+      wchar_t buffer[256 + 20];
+      
+      GetConsoleTitleW(cm->oritinal_title, 256);
+      
+      StringCbPrintfW(buffer, sizeof(buffer), L"Mark Mode %s", cm->oritinal_title);
+      SetConsoleTitleW(buffer);
+    }
+    else
+      SetConsoleTitleW(L"Mark mode");
   }
   
   cci.bVisible = TRUE;
