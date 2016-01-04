@@ -1361,18 +1361,7 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
     
   con->console_size = csbi.dwSize;
   
-  if(csbi.dwCursorPosition.Y < con->last_cursor_pos.Y ||
-     (csbi.dwCursorPosition.Y == con->last_cursor_pos.Y && con->last_cursor_pos.X < con->last_cursor_pos.X))
-  {
-    /* The cursor was moved *backwards* by the resize, which does not happen in non-wrapping consoles.
-       So we have to recalculate input_line_coord_y
-    
-       On Windows 10, when the console width is increased, line breaks disappear and the cursor position
-       (end of current input line) moves backards/upwards.
-       Hovever, when the console width is decreased (again), the cursor position (end of current input line)
-       will not move downwards again. So input_line_coord_y will only ever move upwards.
-     */
-    
+  if(csbi.dwCursorPosition.Y != con->last_cursor_pos.Y || con->last_cursor_pos.X != con->last_cursor_pos.X) {
     int linear_cursor_pos = con->prompt_size + con->input_pos;
     
     int lines = linear_cursor_pos / csbi.dwSize.X;
