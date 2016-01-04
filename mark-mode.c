@@ -35,6 +35,7 @@ struct console_mark_t {
   unsigned continue_on_empty_click: 1;
   unsigned was_block_mode: 1;
   unsigned block_mode: 1;
+  unsigned mouse_down: 1;
 };
 
 static BOOL have_selected_output(struct console_mark_t *cm);
@@ -76,6 +77,13 @@ static void reselect_output(struct console_mark_t *cm, COORD pos, COORD anchor) 
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   
   assert(cm != NULL);
+  
+  debug_printf(
+    L"reselect_output %d:%d .. %d:%d\n",
+    (int)anchor.Y,
+    (int)anchor.X,
+    (int)pos.Y,
+    (int)pos.X);
   
   if(cm->block_mode) {
     SMALL_RECT old_rect;
@@ -562,6 +570,8 @@ static BOOL mark_mode_handle_mouse_event(struct console_mark_t *cm, MOUSE_EVENT_
   switch(er->dwEventFlags) {
     case 0: /* mouse down/up */
       debug_printf(L"mark_mode_handle_mouse_event press/release %x %x\n", er->dwButtonState, er->dwControlKeyState);
+      cm->mouse_down = (er->dwButtonState != 0);
+      
       if(er->dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) {
         start_mark_mode(cm);
         cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
@@ -584,19 +594,24 @@ static BOOL mark_mode_handle_mouse_event(struct console_mark_t *cm, MOUSE_EVENT_
         COORD end;
         
         if(console_get_screen_word_start_end(cm->output_handle, er->dwMousePosition, &start, &end)) {
+          debug_printf(
+            L"word %d:%d .. %d:%d\n",
+            (int)start.Y,
+            (int)start.X,
+            (int)end.Y,
+            (int)end.X);
           start_mark_mode(cm);
           reselect_output(cm, end, start);
         }
         
+        cm->mouse_down = FALSE;
         return TRUE;
       }
       return cm->active;
       
     case MOUSE_MOVED:
-      if(cm->active) {
-        if(er->dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) {
-          reselect_output(cm, er->dwMousePosition, cm->anchor);
-        }
+      if(cm->active && cm->mouse_down) {
+        reselect_output(cm, er->dwMousePosition, cm->anchor);
       }
       return cm->active;
       
