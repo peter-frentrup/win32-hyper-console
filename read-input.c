@@ -1322,48 +1322,30 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
   if(can_auto_surround(con)) {
     switch(er->uChar.UnicodeChar) {
       case L'(':
-        surround_selection(con, L"(", L")");
-        reselect_input(con, con->input_anchor, con->input_anchor);
-        return;
-        
       case L')':
         surround_selection(con, L"(", L")");
-        reselect_input(con, con->input_pos, con->input_pos);
         return;
         
       case L'[':
-        surround_selection(con, L"[", L"]");
-        reselect_input(con, con->input_anchor, con->input_anchor);
-        return;
-        
       case L']':
         surround_selection(con, L"[", L"]");
-        reselect_input(con, con->input_pos, con->input_pos);
         return;
         
       case L'{':
-        surround_selection(con, L"{", L"}");
-        reselect_input(con, con->input_anchor, con->input_anchor);
-        return;
-        
       case L'}':
         surround_selection(con, L"{", L"}");
-        reselect_input(con, con->input_pos, con->input_pos);
         return;
         
       case L'\"':
         surround_selection(con, L"\"", L"\"");
-        reselect_input(con, con->input_pos, con->input_pos);
         return;
         
       case L'\'':
         surround_selection(con, L"\'", L"\'");
-        reselect_input(con, con->input_pos, con->input_pos);
         return;
         
       case L'`':
         surround_selection(con, L"`", L"`");
-        reselect_input(con, con->input_pos, con->input_pos);
         return;
     }
   }
