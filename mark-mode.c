@@ -500,13 +500,27 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
           break;
           
         case 'C': // Ctrl+C
-        case 'X': // Ctrl+X
           if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
             copy_output_to_clipboard(cm);
             cm->stop = TRUE;
             return TRUE;
           }
           break;
+          
+        case 'X': // Ctrl+X
+          if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+            copy_output_to_clipboard(cm);
+            console_alert(cm->output_handle);
+            cm->stop = TRUE;
+            return TRUE;
+          }
+          break;
+        
+        case VK_BACK:
+        case VK_DELETE:
+          console_alert(cm->output_handle);
+          cm->stop = TRUE;
+          return TRUE;
       }
     }
     else {

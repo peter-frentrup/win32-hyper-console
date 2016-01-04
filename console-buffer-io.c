@@ -525,3 +525,11 @@ BOOL console_get_screen_word_start_end(HANDLE hConsoleOutput, COORD pos, COORD *
   free_memory(screen);
   return FALSE;
 }
+
+void console_alert(HANDLE hConsoleOutput) {
+/* Todo: show flash animation */
+
+//  Beep(800, 200);
+
+  MessageBeep(0xFFFFFFFFU);
+}

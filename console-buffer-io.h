@@ -32,4 +32,6 @@ void console_paste_from_clipboard(HANDLE hConsoleInput);
 
 BOOL console_get_screen_word_start_end(HANDLE hConsoleOutput, COORD pos, COORD *start, COORD *end);
 
+void console_alert(HANDLE hConsoleOutput);
+
 #endif // __CONSOLE_BUFFER_IO_H__
