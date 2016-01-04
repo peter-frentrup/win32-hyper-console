@@ -4,6 +4,7 @@
 #include "text-util.h"
 
 #include <assert.h>
+#include <strsafe.h>
 
 
 #define MAX_BUFFER 512
@@ -78,24 +79,27 @@ BOOL console_read_output_character(
   return TRUE;
 }
 
+/* Signature of [Read|Write]ConsoleOutputAttribute, ignoring const. */
+typedef BOOL (__stdcall *attribute_rw_func_t)( HANDLE, WORD*, DWORD, COORD, LPDWORD);
 
-
-BOOL console_read_output_attribute(
+static BOOL touch_output_attribute(
     HANDLE hConsoleOutput,
     LPWORD lpAttribute,
     DWORD nLength,
     COORD dwReadCoord,
-    LPDWORD lpNumberOfAttrsRead
+    LPDWORD lpNumberOfAttrsTouched,
+    attribute_rw_func_t read_or_write_func
 ) {
-  DWORD attrs_read = 0;
+  DWORD attrs_touched = 0;
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   
+  assert(read_or_write_func != NULL);
   assert(lpAttribute != NULL);
-  assert(lpNumberOfAttrsRead != NULL);
+  assert(lpNumberOfAttrsTouched != NULL);
   assert(dwReadCoord.X >= 0);
   assert(dwReadCoord.Y >= 0);
   
-  *lpNumberOfAttrsRead = 0;
+  *lpNumberOfAttrsTouched = 0;
   
   if(!GetConsoleScreenBufferInfo(hConsoleOutput, &csbi) || csbi.dwSize.X <= 0) {
     debug_printf(L"console_read_output_attribute: GetConsoleScreenBufferInfo");
@@ -105,15 +109,15 @@ BOOL console_read_output_attribute(
   while(nLength > MAX_BUFFER) {
     int x;
     
-    if(!ReadConsoleOutputAttribute(hConsoleOutput, lpAttribute, MAX_BUFFER, dwReadCoord, &attrs_read)) {
-      debug_printf(L"console_read_output_attribute: ReadConsoleOutputAttribute");
+    if(!read_or_write_func(hConsoleOutput, lpAttribute, MAX_BUFFER, dwReadCoord, &attrs_touched)) {
+      debug_printf(L"console_read_output_attribute: read_or_write_func");
       return FALSE;
     }
     
-    *lpNumberOfAttrsRead += attrs_read;
-    lpAttribute += attrs_read;
-    nLength -= attrs_read;
-    x = dwReadCoord.X + attrs_read;
+    *lpNumberOfAttrsTouched += attrs_touched;
+    lpAttribute += attrs_touched;
+    nLength -= attrs_touched;
+    x = dwReadCoord.X + attrs_touched;
     
     dwReadCoord.Y += x / csbi.dwSize.X;
     dwReadCoord.X = x % csbi.dwSize.X;
@@ -123,15 +127,39 @@ BOOL console_read_output_attribute(
   }
   
   if(nLength > 0) {
-    if(!ReadConsoleOutputAttribute(hConsoleOutput, lpAttribute, nLength, dwReadCoord, &attrs_read)) {
-      debug_printf(L"console_read_output_attribute: ReadConsoleOutputAttribute 2");
+    if(!read_or_write_func(hConsoleOutput, lpAttribute, nLength, dwReadCoord, &attrs_touched)) {
+      debug_printf(L"console_read_output_attribute: read_or_write_func 2");
       return FALSE;
     }
     
-    *lpNumberOfAttrsRead += attrs_read;
+    *lpNumberOfAttrsTouched += attrs_touched;
   }
   
   return TRUE;
+}
+
+BOOL console_read_output_attribute(
+    HANDLE hConsoleOutput,
+    LPWORD lpAttribute,
+    DWORD nLength,
+    COORD dwReadCoord,
+    LPDWORD lpNumberOfAttrsRead
+) {
+  return touch_output_attribute(
+      hConsoleOutput, lpAttribute, nLength, dwReadCoord, lpNumberOfAttrsRead,
+      ReadConsoleOutputAttribute);
+}
+
+BOOL console_write_output_attribute(
+    HANDLE hConsoleOutput,
+    const LPWORD lpAttribute,
+    DWORD nLength,
+    COORD dwWriteCoord,
+    LPDWORD lpNumberOfAttrsWritten
+) {
+  return touch_output_attribute(
+      hConsoleOutput, (LPWORD)lpAttribute, nLength, dwWriteCoord, lpNumberOfAttrsWritten,
+      (attribute_rw_func_t)WriteConsoleOutputAttribute);
 }
 
 static void invert_color_attributes(
@@ -337,13 +365,13 @@ void console_reinvert_colors_rect(
   if(new_rect->Bottom >= old_rect->Bottom) {
     rect = *new_rect;
     rect.Top = MAX(new_rect->Top, old_rect->Bottom);
-  
+    
     invert_rect(hConsoleOutput, &rect);
   }
   else {
     rect = *old_rect;
     rect.Top = MAX(old_rect->Top, new_rect->Bottom);
-  
+    
     invert_rect(hConsoleOutput, &rect);
   }
   
@@ -358,7 +386,7 @@ void console_reinvert_colors_rect(
     x_coords[3] = new_rect->Right;
     
     qsort(x_coords, 4, sizeof(SHORT), cmp_short);
-  
+    
     rect.Left = x_coords[0];
     rect.Right = x_coords[1];
     invert_rect(hConsoleOutput, &rect);
@@ -630,9 +658,31 @@ BOOL console_get_screen_word_start_end(HANDLE hConsoleOutput, COORD pos, COORD *
 }
 
 void console_alert(HANDLE hConsoleOutput) {
-  /* Todo: show flash animation */
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
   
 //  Beep(800, 200);
-
   MessageBeep(0xFFFFFFFFU);
+  
+  if(GetConsoleScreenBufferInfo(hConsoleOutput, &csbi)) {
+    COORD pos;
+    DWORD num_read;
+    WORD *attr = allocate_memory(csbi.dwSize.X * csbi.dwSize.Y * sizeof(WORD));
+    
+    pos.X = pos.Y = 0;
+    
+    if(attr && console_read_output_attribute(hConsoleOutput, attr, csbi.dwSize.X * csbi.dwSize.Y, pos, &num_read)) {
+      FillConsoleOutputAttribute(
+          hConsoleOutput,
+          BACKGROUND_RED | BACKGROUND_INTENSITY | FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_INTENSITY,
+          num_read,
+          pos,
+          &num_read);
+          
+      Sleep(200);
+      
+      console_write_output_attribute(hConsoleOutput, attr, num_read, pos, &num_read);
+    }
+    
+    free_memory(attr);
+  }
 }

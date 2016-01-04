@@ -462,6 +462,11 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
           cm->stop = TRUE;
           return TRUE;
           
+        case VK_RETURN:
+          console_alert(cm->output_handle);
+          cm->stop = TRUE;
+          return TRUE;
+          
         case VK_LEFT:
           cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
           move_selection_left(

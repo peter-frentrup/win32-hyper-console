@@ -17,6 +17,13 @@ BOOL console_read_output_attribute(
     COORD dwReadCoord,
     LPDWORD lpNumberOfAttrsRead);
 
+BOOL console_write_output_attribute(
+    HANDLE hConsoleOutput,
+    const LPWORD lpAttribute,
+    DWORD nLength,
+    COORD dwWriteCoord,
+    LPDWORD lpNumberOfAttrsWritten);
+
 void console_reinvert_colors(
   HANDLE hConsoleOutput,
   COORD old_start,
