@@ -78,13 +78,6 @@ static void reselect_output(struct console_mark_t *cm, COORD pos, COORD anchor) 
   
   assert(cm != NULL);
   
-  debug_printf(
-    L"reselect_output %d:%d .. %d:%d\n",
-    (int)anchor.Y,
-    (int)anchor.X,
-    (int)pos.Y,
-    (int)pos.X);
-  
   if(cm->block_mode) {
     SMALL_RECT old_rect;
     SMALL_RECT new_rect;
@@ -569,7 +562,6 @@ static BOOL mark_mode_handle_mouse_event(struct console_mark_t *cm, MOUSE_EVENT_
   
   switch(er->dwEventFlags) {
     case 0: /* mouse down/up */
-      debug_printf(L"mark_mode_handle_mouse_event press/release %x %x\n", er->dwButtonState, er->dwControlKeyState);
       cm->mouse_down = (er->dwButtonState != 0);
       
       if(er->dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) {
@@ -588,18 +580,11 @@ static BOOL mark_mode_handle_mouse_event(struct console_mark_t *cm, MOUSE_EVENT_
       return cm->active;
       
     case DOUBLE_CLICK:
-      debug_printf(L"mark_mode_handle_mouse_event DOUBLE_CLICK %x\n", er->dwButtonState);
       if(er->dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) {
         COORD start;
         COORD end;
         
         if(console_get_screen_word_start_end(cm->output_handle, er->dwMousePosition, &start, &end)) {
-          debug_printf(
-            L"word %d:%d .. %d:%d\n",
-            (int)start.Y,
-            (int)start.X,
-            (int)end.Y,
-            (int)end.X);
           start_mark_mode(cm);
           reselect_output(cm, end, start);
         }
