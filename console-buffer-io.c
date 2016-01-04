@@ -9,6 +9,10 @@
 #define MAX_BUFFER 512
 
 
+#define MIN(A, B)  ((A) < (B) ? (A) : (B))
+#define MAX(A, B)  ((A) > (B) ? (A) : (B))
+
+
 struct send_input_t {
   HANDLE input_handle;
   
@@ -266,6 +270,105 @@ void console_reinvert_colors(
   invert_colors_start_end(hConsoleOutput, csbi.dwSize, coords[2], coords[3]);
 }
 
+static void invert_rect(HANDLE hConsoleOutput, const SMALL_RECT *rect) {
+  COORD start;
+  COORD end;
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  
+  if(!GetConsoleScreenBufferInfo(hConsoleOutput, &csbi) || csbi.dwSize.X <= 0) {
+    debug_printf(L"invert_rect: GetConsoleScreenBufferInfo");
+    return;
+  }
+  
+  start.X = rect->Left;
+  end.X = rect->Right;
+  
+  for(start.Y = rect->Top; start.Y < rect->Bottom; start.Y++) {
+    end.Y = start.Y;
+    
+    invert_colors_start_end(hConsoleOutput, csbi.dwSize, start, end);
+  }
+}
+
+static int cmp_short(const void *short_ptr_a, const void *short_ptr_b) {
+  SHORT a = *(SHORT*)short_ptr_a;
+  SHORT b = *(SHORT*)short_ptr_b;
+  
+  if(a < b)
+    return -1;
+  if(a > b)
+    return +1;
+  return 0;
+}
+
+void console_reinvert_colors_rect(
+    HANDLE hConsoleOutput,
+    const SMALL_RECT *old_rect,
+    const SMALL_RECT *new_rect
+) {
+  SMALL_RECT rect;
+  
+  assert(old_rect != NULL);
+  assert(new_rect != NULL);
+  assert(old_rect->Left <= old_rect->Right);
+  assert(old_rect->Top <= old_rect->Bottom);
+  assert(new_rect->Left <= new_rect->Right);
+  assert(new_rect->Top <= new_rect->Bottom);
+  
+  //invert_rect(hConsoleOutput, old_rect);
+  //invert_rect(hConsoleOutput, new_rect);
+  //return;
+  
+  /* Upper part */
+  if(new_rect->Top <= old_rect->Top) {
+    rect = *new_rect;
+    rect.Bottom = MIN(new_rect->Bottom, old_rect->Top);
+    
+    invert_rect(hConsoleOutput, &rect);
+  }
+  else {
+    rect = *old_rect;
+    rect.Bottom = MIN(old_rect->Bottom, new_rect->Top);
+    
+    invert_rect(hConsoleOutput, &rect);
+  }
+  
+  /* Lower part */
+  if(new_rect->Bottom >= old_rect->Bottom) {
+    rect = *new_rect;
+    rect.Top = MAX(new_rect->Top, old_rect->Bottom);
+  
+    invert_rect(hConsoleOutput, &rect);
+  }
+  else {
+    rect = *old_rect;
+    rect.Top = MAX(old_rect->Top, new_rect->Bottom);
+  
+    invert_rect(hConsoleOutput, &rect);
+  }
+  
+  rect.Top    = MAX(old_rect->Top,    new_rect->Top);
+  rect.Bottom = MIN(old_rect->Bottom, new_rect->Bottom);
+  if(rect.Top <= rect.Bottom) {
+    SHORT x_coords[4];
+    
+    x_coords[0] = old_rect->Left;
+    x_coords[1] = old_rect->Right;
+    x_coords[2] = new_rect->Left;
+    x_coords[3] = new_rect->Right;
+    
+    qsort(x_coords, 4, sizeof(SHORT), cmp_short);
+  
+    rect.Left = x_coords[0];
+    rect.Right = x_coords[1];
+    invert_rect(hConsoleOutput, &rect);
+    
+    rect.Left = x_coords[2];
+    rect.Right = x_coords[3];
+    invert_rect(hConsoleOutput, &rect);
+  }
+}
+
 void console_clean_lines(HANDLE hConsoleOutput, int num_lines) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   COORD pos;
@@ -351,7 +454,7 @@ static BOOL flush_input(struct send_input_t *context) {
   DWORD written;
   
   assert(context != NULL);
-    
+  
   assert(context->counter >= 0);
   assert(context->counter <= sizeof(context->input_records) / sizeof(INPUT_RECORD));
   
@@ -495,9 +598,9 @@ BOOL console_get_screen_word_start_end(HANDLE hConsoleOutput, COORD pos, COORD *
   }
   
   screen = allocate_memory(sizeof(wchar_t) * length);
-  if(!screen) 
+  if(!screen)
     return FALSE;
-  
+    
   if(console_read_output_character(hConsoleOutput, screen, length, *start, &num_read)) {
     int s = console_get_word_start(screen, length, pos.X + offset);
     int e = console_get_word_end(screen, length, pos.X + offset);
@@ -527,8 +630,8 @@ BOOL console_get_screen_word_start_end(HANDLE hConsoleOutput, COORD pos, COORD *
 }
 
 void console_alert(HANDLE hConsoleOutput) {
-/* Todo: show flash animation */
-
+  /* Todo: show flash animation */
+  
 //  Beep(800, 200);
 
   MessageBeep(0xFFFFFFFFU);

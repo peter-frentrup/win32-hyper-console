@@ -24,6 +24,23 @@ void console_reinvert_colors(
   COORD new_start,
   COORD new_end);
 
+/* Invert old_rect and then new_rect.
+
+   \param hConsoleHandle A console buffer handle.
+   \param old_rect A rectangle. It must have sorted and coordinates. 
+                   Right/Bottom coordinates are not included (like Win32 GDI functions, 
+                   unlike many Win32 console functions).
+                   Hence an empty rectangle has Left==Right or Top==Bottom.
+   \param new_rect A rectangle. It must have sorted and coordinates. 
+                   Right/Bottom coordinates are not included (like Win32 GDI functions, 
+                   unlike many Win32 console functions).
+                   Hence an empty rectangle has Left==Right or Top==Bottom.
+ */
+void console_reinvert_colors_rect(
+  HANDLE hConsoleOutput,
+  const SMALL_RECT *old_rect,
+  const SMALL_RECT *new_rect);
+
 void console_clean_lines(HANDLE hConsoleOutput, int num_lines);
 
 BOOL console_scroll_wheel(HANDLE hConsoleOutput, const MOUSE_EVENT_RECORD *er);

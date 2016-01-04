@@ -63,24 +63,13 @@ static BOOL have_selected_output(struct console_mark_t *cm) {
   return cm->block_mode || cm->anchor.X != cm->pos.X || cm->anchor.Y != cm->pos.Y;
 }
 
-static void invert_colors_block(
-  HANDLE hConsoleOutput,
-  COORD start,
-  COORD end
-) {
-  int y;
+static void make_inclusive_rect(SMALL_RECT *rect, COORD p1, COORD p2) {
+  assert(rect != NULL);
   
-  for(y = MIN(start.Y, end.Y); y <= MAX(start.Y, end.Y); ++y) {
-    COORD from;
-    COORD to;
-    
-    from.X = MIN(start.X, end.X);
-    from.Y = y;
-    to.X = MAX(start.X, end.X) + 1;
-    to.Y = y;
-    
-    console_reinvert_colors(hConsoleOutput, from, from, from, to);
-  }
+  rect->Left   = MIN(p1.X, p2.X);
+  rect->Right  = MAX(p1.X, p2.X) + 1;
+  rect->Top    = MIN(p1.Y, p2.Y);
+  rect->Bottom = MAX(p1.Y, p2.Y) + 1;
 }
 
 static void reselect_output(struct console_mark_t *cm, COORD pos, COORD anchor) {
@@ -89,18 +78,27 @@ static void reselect_output(struct console_mark_t *cm, COORD pos, COORD anchor) 
   assert(cm != NULL);
   
   if(cm->block_mode) {
-    if(cm->was_block_mode) {
-      invert_colors_block(cm->output_handle, cm->anchor, cm->pos);
-    }
-    else {
+    SMALL_RECT old_rect;
+    SMALL_RECT new_rect;
+    
+    make_inclusive_rect(&old_rect, cm->anchor, cm->pos);
+    make_inclusive_rect(&new_rect, anchor, pos);
+    
+    if(!cm->was_block_mode) {
       console_reinvert_colors(cm->output_handle, cm->anchor, cm->pos, anchor, anchor);
+      old_rect.Bottom = old_rect.Top;
     }
     
-    invert_colors_block(cm->output_handle, anchor, pos);
+    console_reinvert_colors_rect(cm->output_handle, &old_rect, &new_rect);
   }
   else {
     if(cm->was_block_mode) {
-      invert_colors_block(cm->output_handle, cm->anchor, cm->pos);
+      SMALL_RECT empty = {0};
+      SMALL_RECT old_rect;
+    
+      make_inclusive_rect(&old_rect, cm->anchor, cm->pos);
+      
+      console_reinvert_colors_rect(cm->output_handle, &old_rect, &empty);
       cm->pos = cm->anchor;
     }
     
