@@ -1347,10 +1347,22 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
     return;
   }
   
+  debug_printf(
+    L"buffer_size (%dx%d -> %dx%d) %d:%d -> %d:%d; linear = %d\n",
+    (int)con->console_size.Y,
+    (int)con->console_size.X,
+    (int)csbi.dwSize.Y,
+    (int)csbi.dwSize.X,
+    (int)con->last_cursor_pos.Y,
+    (int)con->last_cursor_pos.X,
+    (int)csbi.dwCursorPosition.Y,
+    (int)csbi.dwCursorPosition.X,
+    con->prompt_size + con->input_pos);
+    
   con->console_size = csbi.dwSize;
   
-  if(  csbi.dwCursorPosition.Y < con->last_cursor_pos.Y ||
-      (csbi.dwCursorPosition.Y == con->last_cursor_pos.Y && con->last_cursor_pos.X < con->last_cursor_pos.X))
+  if(csbi.dwCursorPosition.Y < con->last_cursor_pos.Y ||
+     (csbi.dwCursorPosition.Y == con->last_cursor_pos.Y && con->last_cursor_pos.X < con->last_cursor_pos.X))
   {
     /* The cursor was moved *backwards* by the resize, which does not happen in non-wrapping consoles.
        So we have to recalculate input_line_coord_y
@@ -1370,26 +1382,17 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
       /* Strange! If the cursor moved due to line-unwrapping, then its column position
          should be exactly rest.
        */
-      
-      wchar_t buffer[100];
-      
-      StringCbPrintfW(buffer, sizeof(buffer),
-          L"incomplete unwrap: cursor.X = %d != %d\n",
-          (int)csbi.dwCursorPosition.X,
-          rest);
-          
-      OutputDebugStringW(buffer);
+      debug_printf(
+        L"incomplete unwrap: cursor.X = %d != %d\n",
+        (int)csbi.dwCursorPosition.X,
+        rest);
     }
     
-    if(con->input_line_coord_y != csbi.dwSize.Y - lines) {
-      wchar_t buffer[100];
-      
-      StringCbPrintfW(buffer, sizeof(buffer),
-          L"move input_line_coord_y from %d to %d\n",
-          con->input_line_coord_y,
-          csbi.dwSize.Y - lines);
-          
-      OutputDebugStringW(buffer);
+    if(con->input_line_coord_y != csbi.dwCursorPosition.Y - lines) {
+      debug_printf(
+        L"move input_line_coord_y from %d to %d\n",
+        con->input_line_coord_y,
+        csbi.dwCursorPosition.Y - lines);
     }
     
     con->input_line_coord_y = csbi.dwSize.Y - lines;

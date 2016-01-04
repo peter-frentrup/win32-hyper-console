@@ -8,6 +8,18 @@
 
 #define MIN(A, B)  ((A) < (B) ? (A) : (B))
 
+/* Due to line (un-)wrapping, global lines can map to screen lines in the 
+   following ways.
+   
+       Global     G->1   G->2    Local1  1->G      Loc2  2->G
+   11  XXXXX      0:0    0:0     XXXXXY  11:0      XXXX  11:0
+   12  YYY        0:5    1:1     YY....  12:1      XYYY  11:4
+   13  ZZZZZZ     2:0    2:0     ZZZZZZ  13:0      ZZZZ  13:0
+   14  WW         3:0    4:0     WW....  14:0      ZZZ.  13:4
+                                                   WW..  14:0
+ */
+
+
 struct text_line_t {
   int length;
   wchar_t content[1];
@@ -92,7 +104,7 @@ static void remove_lines_front(struct text_array_t *text, int num_remove) {
   memmove(
       text->lines,
       text->lines + num_remove,
-      (text->count - num_remove) * sizeof(struct text_line_t *));
+      (text->count - num_remove) * sizeof(struct text_line_t*));
       
   text->count -= num_remove;
 }
@@ -120,13 +132,13 @@ static BOOL append_null_lines(struct text_array_t *text, int num_add) {
   if(!resize_array(
       (void**)&text->lines,
       &text->capacity,
-      sizeof(struct text_line_t *),
+      sizeof(struct text_line_t*),
       text->count + num_add))
   {
     return FALSE;
   }
   
-  memset(text->lines + text->count, 0, num_add * sizeof(struct text_line_t *));
+  memset(text->lines + text->count, 0, num_add * sizeof(struct text_line_t*));
   text->count += num_add;
   return TRUE;
 }
