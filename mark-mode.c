@@ -12,6 +12,11 @@
 #  define MOUSE_HWHEELED 0x0008
 #endif
 
+
+#define MIN(A, B)  ((A) < (B) ? (A) : (B))
+#define MAX(A, B)  ((A) > (B) ? (A) : (B))
+
+
 struct console_mark_t {
   HANDLE input_handle;
   HANDLE output_handle;
@@ -28,6 +33,7 @@ struct console_mark_t {
   unsigned active: 1;
   unsigned stop: 1;
   unsigned continue_on_empty_click: 1;
+  unsigned was_block_mode: 1;
   unsigned block_mode: 1;
 };
 
@@ -57,30 +63,63 @@ static BOOL have_selected_output(struct console_mark_t *cm) {
   return cm->anchor.X != cm->pos.X || cm->anchor.Y != cm->pos.Y;
 }
 
+static void invert_colors_block(
+  HANDLE hConsoleOutput,
+  COORD start,
+  COORD end
+) {
+  int y;
+  
+  for(y = MIN(start.Y, end.Y); y <= MAX(start.Y, end.Y); ++y) {
+    COORD from;
+    COORD to;
+    
+    from.X = MIN(start.X, end.X);
+    from.Y = y;
+    to.X = MAX(start.X, end.X) + 1;
+    to.Y = y;
+    
+    console_reinvert_colors(hConsoleOutput, from, from, from, to);
+  }
+}
+
 static void reselect_output(struct console_mark_t *cm, COORD pos, COORD anchor) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   
   assert(cm != NULL);
   
-  console_reinvert_colors(
-      cm->output_handle,
-      cm->anchor,
-      cm->pos,
-      anchor,
-      pos);
-      
+  if(cm->block_mode) {
+    if(cm->was_block_mode) {
+      invert_colors_block(cm->output_handle, cm->anchor, cm->pos);
+    }
+    else {
+      console_reinvert_colors(cm->output_handle, cm->anchor, cm->pos, anchor, anchor);
+    }
+    
+    invert_colors_block(cm->output_handle, anchor, pos);
+  }
+  else {
+    if(cm->was_block_mode) {
+      invert_colors_block(cm->output_handle, cm->anchor, cm->pos);
+      cm->pos = cm->anchor;
+    }
+    
+    console_reinvert_colors(cm->output_handle, cm->anchor, cm->pos, anchor, pos);
+  }
+  
+  cm->was_block_mode = cm->block_mode;
   cm->anchor = anchor;
   cm->pos = pos;
   
   
   if(pos.X == cm->console_size.X)
     --pos.X;
-  
+    
 //  if(pos.Y == cm->console_size.Y) {
 //    pos.Y--;
 //    pos.X = cm->console_size.X - 1;
 //  }
-    
+
   if(GetConsoleScreenBufferInfo(cm->output_handle, &csbi)) {
     if(csbi.dwCursorPosition.X != pos.X || csbi.dwCursorPosition.Y != pos.Y)
       SetConsoleCursorPosition(cm->output_handle, pos);
@@ -142,7 +181,7 @@ static void move_selection_up(struct console_mark_t *cm, BOOL fix_anchor) {
   new_pos = cm->pos;
   if(new_pos.Y > 0)
     new_pos.Y--;
-  else if(new_pos.X > 0)
+  else if(new_pos.X > 0 && !cm->block_mode)
     new_pos.X = 0;
     
   reselect_output(cm, new_pos, fix_anchor ? cm->anchor : new_pos);
@@ -156,7 +195,7 @@ static void move_selection_down(struct console_mark_t *cm, BOOL fix_anchor) {
   new_pos = cm->pos;
   if(new_pos.Y + 1 < cm->console_size.Y)
     new_pos.Y++;
-  else if(new_pos.X < cm->console_size.X)
+  else if(new_pos.X < cm->console_size.X && !cm->block_mode)
     new_pos.X = cm->console_size.X;
     
   reselect_output(cm, new_pos, fix_anchor ? cm->anchor : new_pos);
@@ -165,11 +204,11 @@ static void move_selection_down(struct console_mark_t *cm, BOOL fix_anchor) {
 
 
 static wchar_t *cat_console_line(
-    struct console_mark_t *cm,
-    wchar_t *buffer,
-    wchar_t *buffer_end,
-    COORD start,
-    int length
+  struct console_mark_t *cm,
+  wchar_t *buffer,
+  wchar_t *buffer_end,
+  COORD start,
+  int length
 ) {
   DWORD dummy_read_count;
   wchar_t *s;
@@ -188,12 +227,12 @@ static wchar_t *cat_console_line(
   }
   
   console_read_output_character(
-      cm->output_handle,
-      buffer,
-      length,
-      start,
-      &dummy_read_count);
-      
+    cm->output_handle,
+    buffer,
+    length,
+    start,
+    &dummy_read_count);
+    
   s = buffer + length;
   if(s[-1] == L' ') {
     while(s > buffer && s[-1] == L' ')
@@ -209,7 +248,11 @@ static wchar_t *cat_console_line(
   return s;
 }
 
-static void copy_output_to_clipboard(struct console_mark_t *cm) {
+/** Get the non-block-mode selected text.
+
+  \return The unwrapped text lines. Should be freed with free_memory(). NULL on error.
+ */
+static wchar_t *get_selection_lines(struct console_mark_t *cm, int *total_length) {
   COORD start;
   COORD end;
   int length;
@@ -220,6 +263,7 @@ static void copy_output_to_clipboard(struct console_mark_t *cm) {
   wchar_t *s;
   
   assert(cm != NULL);
+  assert(total_length != NULL);
   
   index_a = cm->anchor.Y * cm->console_size.X + cm->anchor.X;
   index_b = cm->pos.Y    * cm->console_size.X + cm->pos.X;
@@ -241,8 +285,10 @@ static void copy_output_to_clipboard(struct console_mark_t *cm) {
   
   max_length = length + 2 * (end.Y - start.Y + 1) + 1;
   str = allocate_memory(sizeof(wchar_t) * max_length);
-  if(!str)
-    return;
+  if(!str) {
+    total_length = 0;
+    return NULL;
+  }
     
   s = str;
   while(start.Y < end.Y) {
@@ -259,10 +305,86 @@ static void copy_output_to_clipboard(struct console_mark_t *cm) {
     
   *s = L'\0';
   
+  *total_length = s - str;
+  return str;
+}
+
+/** Get the block-mode selected text.
+
+  \return The rectangle block of lines, trimmed ad line ends. 
+  Should be freed with free_memory(). NULL on error.
+ */
+static wchar_t *get_selection_block_lines(struct console_mark_t *cm, int *total_length) {
+  COORD start;
+  COORD end;
+  wchar_t *str;
+  wchar_t *s;
+  int length;
+  int line_length;
+  COORD pos;
+  
+  assert(cm != NULL);
+  assert(total_length != NULL);
+  
+  start.Y = MIN(cm->anchor.Y, cm->pos.Y);
+  start.X = MIN(cm->anchor.X, cm->pos.X);
+  end.Y   = MAX(cm->anchor.Y, cm->pos.Y);
+  end.X   = MAX(cm->anchor.X, cm->pos.X);
+  
+  line_length = end.X - start.X + 1;
+  
+  length = (end.Y - start.Y + 1) * (line_length + 2);
+  str = allocate_memory(sizeof(wchar_t) * length);
+  if(!str) {
+    *total_length = 0;
+    return NULL;
+  }
+  
+  s = str;
+  pos.X = start.X;
+  for(pos.Y = start.Y;pos.Y <= end.Y;pos.Y++) {
+    DWORD dummy_read_count;
+    wchar_t *next;
+    
+    console_read_output_character(
+      cm->output_handle,
+      s,
+      line_length,
+      pos,
+      &dummy_read_count);
+    
+    next = s + line_length;
+    while(next != s && next[-1] == L' ')
+      --next;
+    
+    s = next;
+    *s++ = L'\r';
+    *s++ = L'\n';
+  }
+  
+  s-= 2;
+  *s = L'\0';
+  *total_length = s - str;
+  return str;
+}
+
+static void copy_output_to_clipboard(struct console_mark_t *cm) {
+  wchar_t *str;
+  int length;
+  
+  if(cm->block_mode)
+    str = get_selection_block_lines(cm, &length);
+  else
+    str = get_selection_lines(cm, &length);
+    
+  if(!str)
+    return;
+  
+  assert(length >= 0);
   
   if(OpenClipboard(NULL)) {
     void *copy_data;
-    HGLOBAL copy_handle = GlobalAlloc(GMEM_MOVEABLE, (s - str + 1) * sizeof(wchar_t));
+    HGLOBAL copy_handle = GlobalAlloc(GMEM_MOVEABLE, (length + 1) * sizeof(wchar_t));
     
     if(!copy_handle) {
       free_memory(str);
@@ -271,7 +393,7 @@ static void copy_output_to_clipboard(struct console_mark_t *cm) {
     }
     
     copy_data = GlobalLock(copy_handle);
-    memcpy(copy_data, str, (s - str + 1) * sizeof(wchar_t));
+    memcpy(copy_data, str, (length + 1) * sizeof(wchar_t));
     GlobalUnlock(copy_handle);
     
     SetClipboardData(CF_UNICODETEXT, copy_handle);
@@ -333,29 +455,33 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
           return TRUE;
           
         case VK_LEFT:
+          cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
           move_selection_left(
-              cm,
-              er->dwControlKeyState & SHIFT_PRESSED,
-              er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+            cm,
+            er->dwControlKeyState & SHIFT_PRESSED,
+            er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
           return TRUE;
           
         case VK_RIGHT:
+          cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
           move_selection_right(
-              cm,
-              er->dwControlKeyState & SHIFT_PRESSED,
-              er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+            cm,
+            er->dwControlKeyState & SHIFT_PRESSED,
+            er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
           return TRUE;
           
         case VK_UP:
+          cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
           move_selection_up(
-              cm,
-              er->dwControlKeyState & SHIFT_PRESSED);
+            cm,
+            er->dwControlKeyState & SHIFT_PRESSED);
           return TRUE;
           
         case VK_DOWN:
+          cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
           move_selection_down(
-              cm,
-              er->dwControlKeyState & SHIFT_PRESSED);
+            cm,
+            er->dwControlKeyState & SHIFT_PRESSED);
           return TRUE;
           
         case 'A': // Ctrl+A
@@ -408,9 +534,11 @@ static BOOL mark_mode_handle_mouse_event(struct console_mark_t *cm, MOUSE_EVENT_
   
   switch(er->dwEventFlags) {
     case 0: /* mouse down/up */
-      debug_printf(L"mark_mode_handle_mouse_event press/release %x\n", er->dwButtonState);
+      debug_printf(L"mark_mode_handle_mouse_event press/release %x %x\n", er->dwButtonState, er->dwControlKeyState);
       if(er->dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) {
         start_mark_mode(cm);
+        cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
+        
         reselect_output(cm, er->dwMousePosition, er->dwMousePosition);
         return TRUE;
       }
@@ -495,6 +623,7 @@ static BOOL run_mark_mode(struct console_mark_t *cm, INPUT_RECORD *event) {
 static void finish_mark_mode(struct console_mark_t *cm) {
   assert(cm != NULL);
   
+  cm->block_mode = FALSE;
   reselect_output(cm, cm->original_pos, cm->original_pos);
   
   if(cm->oritinal_title) {
@@ -529,7 +658,7 @@ BOOL console_handle_mark_mode(HANDLE hConsoleInput, HANDLE hConsoleOutput, INPUT
   
   if(force_mark_mode)
     start_mark_mode(&cm);
-  
+    
   result = run_mark_mode(&cm, event);
   finish_mark_mode(&cm);
   
