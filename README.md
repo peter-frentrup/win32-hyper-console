@@ -10,8 +10,9 @@ This library implements advanced Win32 console input with mouse and clipboard su
 * Clipboard support via Ctrl+C, Ctrl+X, Ctrl+V
 * Highlight matching bracket
 * Clickable links anywhere in the output (can be clicked during `read_input()`)
+* surround selection with (...), [...], "..." when one of the delimiters is entered.
 
-### Goals ###
+### Goals/TODO ###
 
 * Input history
 * (customizable) auto-completion with Tab/Shift+Tab/Esc
