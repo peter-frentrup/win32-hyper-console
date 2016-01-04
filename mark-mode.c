@@ -60,7 +60,7 @@ static void finish_mark_mode(struct console_mark_t *cm);
 static BOOL have_selected_output(struct console_mark_t *cm) {
   assert(cm != NULL);
   
-  return cm->anchor.X != cm->pos.X || cm->anchor.Y != cm->pos.Y;
+  return cm->block_mode || cm->anchor.X != cm->pos.X || cm->anchor.Y != cm->pos.Y;
 }
 
 static void invert_colors_block(
