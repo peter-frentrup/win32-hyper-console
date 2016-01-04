@@ -374,6 +374,9 @@ static void show_help(void) {
   write_simple_link(L"change and list directory", L"cd+dir .", L"cd+dir");
   printf("\t Change directory and then list its content.\n");
   
+  write_simple_link(L"clear screen", L"cls", L"cls");
+  printf("\t Clear the screen.\n");
+  
   write_simple_link(L"get or set console color", L"color /?", L"color");
   printf("\t Modify the console color.\n");
   
@@ -464,6 +467,11 @@ int main() {
     if(first_word_equals(str, L"cd+dir")) {
       change_directory(str + 6);
       list_directory();
+      continue;
+    }
+    
+    if(first_word_equals(str, L"cls")) {
+      system("cls");
       continue;
     }
     
