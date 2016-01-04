@@ -1395,7 +1395,7 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
         csbi.dwCursorPosition.Y - lines);
     }
     
-    con->input_line_coord_y = csbi.dwSize.Y - lines;
+    con->input_line_coord_y = csbi.dwCursorPosition.Y - lines;
   }
   
   console_clean_lines(con->output_handle, con->input_line_coord_y);
