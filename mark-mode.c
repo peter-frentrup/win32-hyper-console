@@ -354,15 +354,22 @@ static wchar_t *get_selection_block_lines(struct console_mark_t *cm, int *total_
       &dummy_read_count);
     
     next = s + line_length;
-    while(next != s && next[-1] == L' ')
-      --next;
+    if(pos.Y < end.Y) {
+      while(next != s && next[-1] == L' ')
+        --next;
+       
+      *next++ = L'\r';
+      *next++ = L'\n';
+    }
     
     s = next;
-    *s++ = L'\r';
-    *s++ = L'\n';
   }
   
-  s-= 2;
+  if(start.Y < end.Y) {
+    while(s != str && s[-1] == L' ')
+      --s;
+  }
+  
   *s = L'\0';
   *total_length = s - str;
   return str;
