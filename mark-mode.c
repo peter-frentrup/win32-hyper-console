@@ -119,10 +119,12 @@ static void reselect_output(struct console_mark_t *cm, COORD pos, COORD anchor) 
 //    pos.Y--;
 //    pos.X = cm->console_size.X - 1;
 //  }
-
+   
   if(GetConsoleScreenBufferInfo(cm->output_handle, &csbi)) {
-    if(csbi.dwCursorPosition.X != pos.X || csbi.dwCursorPosition.Y != pos.Y)
+    if(csbi.dwCursorPosition.X != pos.X || csbi.dwCursorPosition.Y != pos.Y) {
       SetConsoleCursorPosition(cm->output_handle, pos);
+      SetConsoleWindowInfo(cm->output_handle, TRUE, &csbi.srWindow);
+    }
   }
 }
 
