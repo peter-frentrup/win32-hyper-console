@@ -1395,11 +1395,17 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
 }
 
 static void handle_focus_event(struct console_input_t *con, const FOCUS_EVENT_RECORD *er) {
-
+  assert(con != NULL);
+  assert(er != NULL);
+  
+  debug_printf(L"handle_focus_event %d\n", (int)er->bSetFocus);
 }
 
 static void handle_menu_event(struct console_input_t *con, const MENU_EVENT_RECORD *er) {
-
+  assert(con != NULL);
+  assert(er != NULL);
+  
+  debug_printf(L"handle_menu_event %d\n", (int)er->dwCommandId);
 }
 
 static void handle_unknown_event(struct console_input_t *con, const INPUT_RECORD *ir) {
