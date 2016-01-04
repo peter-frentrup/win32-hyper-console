@@ -87,9 +87,13 @@ static BOOL scroll_screen_if_needed(struct console_input_t *con);
 static BOOL write_output_buffer_lines(struct console_input_t *con);
 static BOOL set_output_cursor_position(struct console_input_t *con);
 
+static BOOL selection_equals(struct console_input_t *con, const wchar_t *str);
+static BOOL can_auto_surround(struct console_input_t *con);
+
 static BOOL resize_input_text(struct console_input_t *con, int length);
 static BOOL insert_input_text(struct console_input_t *con, int pos, const  wchar_t *str, int length);
 static BOOL insert_input_char(struct console_input_t *con, int pos, wchar_t ch);
+static BOOL surround_selection(struct console_input_t *con, const wchar_t *left, const wchar_t *right);
 static BOOL delete_input_text(struct console_input_t *con, int pos, int length);
 
 static void reselect_input(struct console_input_t *con, int new_pos, int new_anchor);
@@ -332,10 +336,10 @@ static BOOL resize_output_buffer(struct console_input_t *con, int size) {
     return FALSE;
     
   if(!resize_array(
-      (void**)&con->output_buffer,
-      &con->output_capacity,
-      sizeof(con->output_buffer[0]),
-      size))
+        (void**)&con->output_buffer,
+        &con->output_capacity,
+        sizeof(con->output_buffer[0]),
+        size))
   {
     con->error = "resize_array";
     con->output_size = 0;
@@ -343,10 +347,10 @@ static BOOL resize_output_buffer(struct console_input_t *con, int size) {
   }
   
   if(!resize_array(
-      (void**)&con->output_to_input_positions,
-      &con->output_to_input_capacity,
-      sizeof(con->output_to_input_positions[0]),
-      size))
+        (void**)&con->output_to_input_positions,
+        &con->output_to_input_capacity,
+        sizeof(con->output_to_input_positions[0]),
+        size))
   {
     con->error = "resize_array";
     con->output_size = 0;
@@ -419,14 +423,14 @@ static BOOL insert_glyph(struct console_input_t *con, int pos, CHAR_INFO glyph, 
     return FALSE;
     
   memmove(
-      con->output_buffer + pos + repeat,
-      con->output_buffer + pos,
-      (con->output_size - pos - repeat) * sizeof(CHAR_INFO));
+    con->output_buffer + pos + repeat,
+    con->output_buffer + pos,
+    (con->output_size - pos - repeat) * sizeof(CHAR_INFO));
   memmove(
-      con->output_to_input_positions + pos + repeat,
-      con->output_to_input_positions + pos,
-      (con->output_size - pos - repeat) * sizeof(int));
-      
+    con->output_to_input_positions + pos + repeat,
+    con->output_to_input_positions + pos,
+    (con->output_size - pos - repeat) * sizeof(int));
+    
   for(i = 0; i < repeat; ++i) {
     con->output_buffer[pos + i] = glyph;
   }
@@ -775,16 +779,70 @@ static BOOL update_output(struct console_input_t *con) {
   return !(con->error);
 }
 
+static BOOL selection_equals(struct console_input_t *con, const wchar_t *str) {
+  int length;
+  int start;
+  int end;
+  
+  assert(con != NULL);
+  assert(str != NULL);
+  
+  length = wcslen(str);
+  
+  start = MIN(con->input_anchor, con->input_pos);
+  end   = MAX(con->input_anchor, con->input_pos);
+  
+  if(start + length == end) {
+    return 0 == memcmp(con->input_text + start, str, length * sizeof(wchar_t));
+  }
+  
+  return FALSE;
+}
+
+static BOOL can_auto_surround(struct console_input_t *con) {
+  if(con->input_anchor == con->input_pos)
+    return FALSE;
+    
+  if(selection_equals(con, L"("))
+    return FALSE;
+    
+  if(selection_equals(con, L")"))
+    return FALSE;
+    
+  if(selection_equals(con, L"["))
+    return FALSE;
+    
+  if(selection_equals(con, L"]"))
+    return FALSE;
+    
+  if(selection_equals(con, L"{"))
+    return FALSE;
+    
+  if(selection_equals(con, L"}"))
+    return FALSE;
+    
+  if(selection_equals(con, L"\'"))
+    return FALSE;
+    
+  if(selection_equals(con, L"\""))
+    return FALSE;
+    
+  if(selection_equals(con, L"`"))
+    return FALSE;
+    
+  return TRUE;
+}
+
 static BOOL resize_input_text(struct console_input_t *con, int length) {
   assert(con != NULL);
   if(con->error)
     return FALSE;
     
   if(!resize_array(
-      (void**)&con->input_text,
-      &con->input_capacity,
-      sizeof(con->input_text[0]),
-      length + 1))
+        (void**)&con->input_text,
+        &con->input_capacity,
+        sizeof(con->input_text[0]),
+        length + 1))
   {
     con->error = "resize_array";
     con->input_length = 0;
@@ -792,10 +850,10 @@ static BOOL resize_input_text(struct console_input_t *con, int length) {
   }
   
   if(!resize_array(
-      (void**)&con->input_to_output_positions,
-      &con->input_to_output_capacity,
-      sizeof(con->input_to_output_positions[0]),
-      length + 1))
+        (void**)&con->input_to_output_positions,
+        &con->input_to_output_capacity,
+        sizeof(con->input_to_output_positions[0]),
+        length + 1))
   {
     con->error = "resize_array";
     con->input_length = 0;
@@ -829,15 +887,15 @@ static BOOL insert_input_text(struct console_input_t *con, int pos, const wchar_
     return FALSE;
     
   memmove(
-      con->input_text + pos + length,
-      con->input_text + pos,
-      (con->input_length - pos - length) * sizeof(wchar_t));
-      
+    con->input_text + pos + length,
+    con->input_text + pos,
+    (con->input_length - pos - length) * sizeof(wchar_t));
+    
   memmove(
-      con->input_text + pos,
-      str,
-      length * sizeof(wchar_t));
-      
+    con->input_text + pos,
+    str,
+    length * sizeof(wchar_t));
+    
   if(pos <= con->input_pos)
     con->input_pos += length;
     
@@ -851,6 +909,36 @@ static BOOL insert_input_char(struct console_input_t *con, int pos, wchar_t ch) 
   return insert_input_text(con, pos, &ch, 1);
 }
 
+static BOOL surround_selection(struct console_input_t *con, const wchar_t *left, const wchar_t *right) {
+  int start;
+  int end;
+  int left_length;
+  int right_length;
+  
+  assert(con != NULL);
+  assert(left != NULL);
+  assert(right != NULL);
+  
+  left_length  = wcslen(left);
+  right_length = wcslen(right);
+  
+  start = MIN(con->input_anchor, con->input_pos);
+  end = MAX(con->input_anchor, con->input_pos);
+  
+  if(!insert_input_text(con, end, right, right_length))
+    return FALSE;
+    
+  end+= right_length;
+  if(!insert_input_text(con, start, left, left_length)) {
+    delete_input_text(con, end, 1);
+    return FALSE;
+  }
+  
+  end+= left_length;
+  reselect_input(con, end, start);
+  return TRUE;
+}
+
 static BOOL delete_input_text(struct console_input_t *con, int pos, int length) {
   assert(con != NULL);
   if(con->error)
@@ -862,10 +950,10 @@ static BOOL delete_input_text(struct console_input_t *con, int pos, int length) 
   assert(length <= con->input_length - pos);
   
   memmove(
-      con->input_text + pos,
-      con->input_text + pos + length,
-      (con->input_length - pos - length) * sizeof(wchar_t));
-      
+    con->input_text + pos,
+    con->input_text + pos + length,
+    (con->input_length - pos - length) * sizeof(wchar_t));
+    
   resize_input_text(con, con->input_length - length);
   if(con->error)
     return FALSE;
@@ -1091,7 +1179,6 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
         if(con->input_pos == con->input_length && con->input_pos > 0 && con->input_text[con->input_pos - 1] == L'\n') {
           con->stop = 1;
           con->input_length -= 1;
-          return;
         }
         else {
           delete_selection_no_update(con);
@@ -1111,9 +1198,9 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
     case VK_BACK:
       if(con->input_anchor == con->input_pos) {
         move_left(
-            con,
-            TRUE,
-            er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+          con,
+          TRUE,
+          er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
       }
       delete_selection_no_update(con);
       update_output(con);
@@ -1122,9 +1209,9 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
     case VK_DELETE:
       if(con->input_anchor == con->input_pos) {
         move_right(
-            con,
-            TRUE,
-            er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+          con,
+          TRUE,
+          er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
       }
       delete_selection_no_update(con);
       update_output(con);
@@ -1132,16 +1219,16 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
       
     case VK_LEFT:
       move_left(
-          con,
-          er->dwControlKeyState & SHIFT_PRESSED,
-          er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+        con,
+        er->dwControlKeyState & SHIFT_PRESSED,
+        er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
       return;
       
     case VK_RIGHT:
       move_right(
-          con,
-          er->dwControlKeyState & SHIFT_PRESSED,
-          er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+        con,
+        er->dwControlKeyState & SHIFT_PRESSED,
+        er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
       return;
       
     case VK_HOME:
@@ -1218,6 +1305,7 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
           (er->dwControlKeyState & SHIFT_PRESSED) )
       {
         change_console_size(con, -1);
+        return;
       }
       break;
       
@@ -1226,8 +1314,58 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
           (er->dwControlKeyState & SHIFT_PRESSED) )
       {
         change_console_size(con, +1);
+        return;
       }
       break;
+  }
+  
+  if(can_auto_surround(con)) {
+    switch(er->uChar.UnicodeChar) {
+      case L'(':
+        surround_selection(con, L"(", L")");
+        reselect_input(con, con->input_anchor, con->input_anchor);
+        return;
+        
+      case L')':
+        surround_selection(con, L"(", L")");
+        reselect_input(con, con->input_pos, con->input_pos);
+        return;
+        
+      case L'[':
+        surround_selection(con, L"[", L"]");
+        reselect_input(con, con->input_anchor, con->input_anchor);
+        return;
+        
+      case L']':
+        surround_selection(con, L"[", L"]");
+        reselect_input(con, con->input_pos, con->input_pos);
+        return;
+        
+      case L'{':
+        surround_selection(con, L"{", L"}");
+        reselect_input(con, con->input_anchor, con->input_anchor);
+        return;
+        
+      case L'}':
+        surround_selection(con, L"{", L"}");
+        reselect_input(con, con->input_pos, con->input_pos);
+        return;
+        
+      case L'\"':
+        surround_selection(con, L"\"", L"\"");
+        reselect_input(con, con->input_pos, con->input_pos);
+        return;
+        
+      case L'\'':
+        surround_selection(con, L"\'", L"\'");
+        reselect_input(con, con->input_pos, con->input_pos);
+        return;
+        
+      case L'`':
+        surround_selection(con, L"`", L"`");
+        reselect_input(con, con->input_pos, con->input_pos);
+        return;
+    }
   }
   
   if((unsigned)er->uChar.UnicodeChar >= (unsigned)L' ') {
@@ -1538,15 +1676,15 @@ static void print_error() {
   DWORD dw = GetLastError();
   
   FormatMessageW(
-      FORMAT_MESSAGE_ALLOCATE_BUFFER |
-      FORMAT_MESSAGE_FROM_SYSTEM |
-      FORMAT_MESSAGE_IGNORE_INSERTS,
-      NULL,
-      dw,
-      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-      (wchar_t*)&msgbuf,
-      0, NULL );
-      
+    FORMAT_MESSAGE_ALLOCATE_BUFFER |
+    FORMAT_MESSAGE_FROM_SYSTEM |
+    FORMAT_MESSAGE_IGNORE_INSERTS,
+    NULL,
+    dw,
+    MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+    (wchar_t*)&msgbuf,
+    0, NULL );
+    
   fwprintf(stderr, L"win32 error %x: %s", (unsigned)dw, msgbuf);
   
   LocalFree(msgbuf);
