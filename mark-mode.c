@@ -36,6 +36,7 @@ struct console_mark_t {
   unsigned was_block_mode: 1;
   unsigned block_mode: 1;
   unsigned mouse_down: 1;
+  unsigned follow_cursor: 1;
 };
 
 static BOOL have_selected_output(struct console_mark_t *cm);
@@ -122,9 +123,13 @@ static void reselect_output(struct console_mark_t *cm, COORD pos, COORD anchor) 
   if(GetConsoleScreenBufferInfo(cm->output_handle, &csbi)) {
     if(csbi.dwCursorPosition.X != pos.X || csbi.dwCursorPosition.Y != pos.Y) {
       SetConsoleCursorPosition(cm->output_handle, pos);
-      SetConsoleWindowInfo(cm->output_handle, TRUE, &csbi.srWindow);
+      
+      if(!cm->follow_cursor)
+        SetConsoleWindowInfo(cm->output_handle, TRUE, &csbi.srWindow);
     }
   }
+  
+  cm->follow_cursor = FALSE;
 }
 
 
@@ -468,6 +473,7 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
           return TRUE;
           
         case VK_LEFT:
+          cm->follow_cursor = TRUE;
           cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
           move_selection_left(
             cm,
@@ -476,6 +482,7 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
           return TRUE;
           
         case VK_RIGHT:
+          cm->follow_cursor = TRUE;
           cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
           move_selection_right(
             cm,
@@ -484,6 +491,7 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
           return TRUE;
           
         case VK_UP:
+          cm->follow_cursor = TRUE;
           cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
           move_selection_up(
             cm,
@@ -491,6 +499,7 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
           return TRUE;
           
         case VK_DOWN:
+          cm->follow_cursor = TRUE;
           cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
           move_selection_down(
             cm,
