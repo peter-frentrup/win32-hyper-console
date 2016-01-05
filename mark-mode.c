@@ -444,7 +444,7 @@ static void start_mark_mode(struct console_mark_t *cm) {
   }
   
   cci.bVisible = TRUE;
-  cci.dwSize = 75;
+  cci.dwSize = 50;
   SetConsoleCursorInfo(cm->output_handle, &cci);
 }
 
@@ -662,6 +662,8 @@ static BOOL run_mark_mode(struct console_mark_t *cm, INPUT_RECORD *event) {
 }
 
 static void finish_mark_mode(struct console_mark_t *cm) {
+  CONSOLE_CURSOR_INFO cci;
+  
   assert(cm != NULL);
   
   cm->block_mode = FALSE;
@@ -674,7 +676,11 @@ static void finish_mark_mode(struct console_mark_t *cm) {
     cm->oritinal_title = NULL;
   }
   
-  SetConsoleCursorInfo(cm->output_handle, &cm->original_cursor);
+  cci = cm->original_cursor;
+  GetConsoleCursorInfo(cm->output_handle, &cci);
+  if(0 != memcmp(&cci, &cm->original_cursor, sizeof(cci))) {
+    SetConsoleCursorInfo(cm->output_handle, &cm->original_cursor);
+  }
 }
 
 BOOL console_handle_mark_mode(HANDLE hConsoleInput, HANDLE hConsoleOutput, INPUT_RECORD *event, BOOL force_mark_mode) {
