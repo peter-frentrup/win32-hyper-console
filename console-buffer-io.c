@@ -7,7 +7,7 @@
 #include <strsafe.h>
 
 
-#define MAX_BUFFER 512
+#define MAX_BUFFER 8192
 
 
 #define MIN(A, B)  ((A) < (B) ? (A) : (B))
