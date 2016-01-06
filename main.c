@@ -364,9 +364,26 @@ static void open_document(const wchar_t *arg) {
   }
 }
 
+static void goto_bottom(void) {
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+  
+  printf("Scrolling down.\n");
+  
+  if(GetConsoleScreenBufferInfo(hStdOut, &csbi)) {
+    COORD pos;
+    pos.X = 0;
+    pos.Y = csbi.dwSize.Y - 2; // one line is added before next prompt
+    SetConsoleCursorPosition(hStdOut, pos);
+  }
+}
+
 static void show_help(void) {
   
   printf("Available commands\n");
+  
+  write_simple_link(L"scroll to window bottom", L"bottom", L"bottom");
+  printf("\t Advance cursor to bottom of the console buffer.\n");
   
   write_simple_link(L"change directory", L"cd", L"cd");
   printf("\t Get or change the current directory.\n");
@@ -451,6 +468,11 @@ int main() {
     if(wcscmp(str, L"single") == 0) {
       printf("Switching to single-line mode.\n");
       multiline_mode = FALSE;
+      continue;
+    }
+    
+    if(wcscmp(str, L"bottom") == 0) {
+      goto_bottom();
       continue;
     }
     
