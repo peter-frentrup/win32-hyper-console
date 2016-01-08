@@ -453,122 +453,125 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
   assert(cm != NULL);
   assert(er != NULL);
   
-  if(er->bKeyDown) {
+  if(!er->bKeyDown) 
+    return cm->active;
+    
+  switch(er->wVirtualKeyCode) {
+    case VK_SHIFT:
+    case VK_CONTROL:
+    case VK_MENU:
+      return cm->active;
+  }
+  
+  if(cm->active) {
     switch(er->wVirtualKeyCode) {
-      case VK_SHIFT:
-      case VK_CONTROL:
-      case VK_MENU:
-        return cm->active;
-    }
-    
-    if(cm->active) {
-      switch(er->wVirtualKeyCode) {
-        case VK_ESCAPE:
-          cm->stop = TRUE;
-          return TRUE;
-          
-        case VK_RETURN:
-          console_alert(cm->output_handle);
-          cm->stop = TRUE;
-          return TRUE;
-          
-        case VK_LEFT:
-          cm->follow_cursor = TRUE;
-          cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
-          move_selection_left(
-            cm,
-            er->dwControlKeyState & SHIFT_PRESSED,
-            er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
-          return TRUE;
-          
-        case VK_RIGHT:
-          cm->follow_cursor = TRUE;
-          cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
-          move_selection_right(
-            cm,
-            er->dwControlKeyState & SHIFT_PRESSED,
-            er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
-          return TRUE;
-          
-        case VK_UP:
-          cm->follow_cursor = TRUE;
-          cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
-          move_selection_up(
-            cm,
-            er->dwControlKeyState & SHIFT_PRESSED);
-          return TRUE;
-          
-        case VK_DOWN:
-          cm->follow_cursor = TRUE;
-          cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
-          move_selection_down(
-            cm,
-            er->dwControlKeyState & SHIFT_PRESSED);
-          return TRUE;
-          
-        case 'A': // Ctrl+A
-          if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
-            COORD anchor;
-            COORD pos;
-            
-            anchor.X = 0;
-            anchor.Y = 0;
-            pos.X = 0;
-            pos.Y = cm->console_size.Y;
-            
-            reselect_output(cm, pos, anchor);
-            return TRUE;
-          }
-          break;
-          
-        case 'C': // Ctrl+C
-          if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
-            if(have_selected_output(cm))
-              copy_output_to_clipboard(cm);
-            else
-              console_alert(cm->output_handle);
-            
-            cm->stop = TRUE;
-            return TRUE;
-          }
-          break;
-          
-        case 'X': // Ctrl+X
-          if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
-            if(have_selected_output(cm))
-              copy_output_to_clipboard(cm);
-            
-            console_alert(cm->output_handle);
-            cm->stop = TRUE;
-            return TRUE;
-          }
-          break;
+      case VK_ESCAPE:
+        cm->stop = TRUE;
+        return TRUE;
         
-        case VK_BACK:
-        case VK_DELETE:
+      case VK_LEFT:
+        cm->follow_cursor = TRUE;
+        cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
+        move_selection_left(
+          cm,
+          er->dwControlKeyState & SHIFT_PRESSED,
+          er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+        return TRUE;
+        
+      case VK_RIGHT:
+        cm->follow_cursor = TRUE;
+        cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
+        move_selection_right(
+          cm,
+          er->dwControlKeyState & SHIFT_PRESSED,
+          er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+        return TRUE;
+        
+      case VK_UP:
+        cm->follow_cursor = TRUE;
+        cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
+        move_selection_up(
+          cm,
+          er->dwControlKeyState & SHIFT_PRESSED);
+        return TRUE;
+        
+      case VK_DOWN:
+        cm->follow_cursor = TRUE;
+        cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
+        move_selection_down(
+          cm,
+          er->dwControlKeyState & SHIFT_PRESSED);
+        return TRUE;
+        
+      case 'A': // Ctrl+A
+        if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+          COORD anchor;
+          COORD pos;
+          
+          anchor.X = 0;
+          anchor.Y = 0;
+          pos.X = 0;
+          pos.Y = cm->console_size.Y;
+          
+          reselect_output(cm, pos, anchor);
+          return TRUE;
+        }
+        break;
+        
+      case VK_RETURN:
+        if(have_selected_output(cm))
+          copy_output_to_clipboard(cm);
+        else
+          console_alert(cm->output_handle);
+        
+        cm->stop = TRUE;
+        return TRUE;
+        
+      case 'C': // Ctrl+C
+        if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+          if(have_selected_output(cm))
+            copy_output_to_clipboard(cm);
+          else
+            console_alert(cm->output_handle);
+          
+          cm->stop = TRUE;
+          return TRUE;
+        }
+        break;
+        
+      case 'X': // Ctrl+X
+        if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+          if(have_selected_output(cm))
+            copy_output_to_clipboard(cm);
+          
           console_alert(cm->output_handle);
           cm->stop = TRUE;
           return TRUE;
-      }
+        }
+        break;
+      
+      case VK_BACK:
+      case VK_DELETE:
+        console_alert(cm->output_handle);
+        cm->stop = TRUE;
+        return TRUE;
     }
-    else {
-      switch(er->wVirtualKeyCode) {
-        case 'M': // Ctrl+M
-          if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
-            start_mark_mode(cm);
-            cm->continue_on_empty_click = TRUE;
-            return TRUE;
-          }
-          break;
-      }
-    }
-    
-    cm->stop = TRUE;
-    return FALSE;
   }
   else {
-    return cm->active;
+    switch(er->wVirtualKeyCode) {
+      case 'M': // Ctrl+M
+        if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+          start_mark_mode(cm);
+          cm->continue_on_empty_click = TRUE;
+          return TRUE;
+        }
+        break;
+    }
   }
+  
+  console_alert(cm->output_handle);
+  cm->stop = TRUE;
+  return FALSE;
 }
 
 static BOOL mark_mode_handle_mouse_event(struct console_mark_t *cm, MOUSE_EVENT_RECORD *er) {
