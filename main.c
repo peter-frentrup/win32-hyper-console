@@ -24,6 +24,7 @@
 
 
 static WORD file_link_color = FOREGROUND_RED | FOREGROUND_GREEN;
+static WORD run_link_color = FOREGROUND_RED | FOREGROUND_BLUE;
 static long interrupted = FALSE;
 
 
@@ -50,6 +51,172 @@ static void write_simple_link(const wchar_t *title, const wchar_t *input_text, c
   end_hyperlink();
 }
 
+static const wchar_t *get_extension(const wchar_t *filename) {
+  const wchar_t *end = filename;
+  const wchar_t *ext;
+  
+  assert(filename != NULL);
+  
+  while(*end)
+    ++end;
+    
+  ext = end;
+  while(ext != filename) {
+    if(*ext == L'.')
+      return ext;
+      
+    if(*ext == L'\\' || *ext == L'/')
+      break;
+      
+    --ext;
+  }
+  
+  return end;
+}
+
+static BOOL has_any_extension(const wchar_t *filename, const wchar_t *extensions) {
+  const wchar_t *file_ext;
+  wchar_t file_ext_upper[MAX_PATH];
+  wchar_t other_ext_upper[MAX_PATH];
+  const wchar_t *end;
+  
+  assert(filename != NULL);
+  if(!extensions)
+    return FALSE;
+    
+  file_ext = get_extension(filename);
+  end = file_ext;
+  while(*end)
+    ++end;
+    
+  if(end - file_ext > ARRAYSIZE(file_ext_upper))
+    return FALSE;
+    
+  memcpy(file_ext_upper, file_ext, (end - file_ext) * sizeof(wchar_t));
+  CharUpperBuffW(file_ext_upper, end - file_ext);
+  
+  while(*extensions) {
+    const wchar_t *next = extensions;
+    
+    while(*next && *next != L';')
+      ++next;
+      
+    if(next - extensions == end - file_ext) {
+      memcpy(other_ext_upper, extensions, (next - extensions) * sizeof(wchar_t));
+      CharUpperBuffW(other_ext_upper, next - extensions);
+      
+      if(0 == wmemcmp(file_ext_upper, other_ext_upper, end - file_ext))
+        return TRUE;
+    }
+    
+    extensions = next;
+    if(*extensions)
+      ++extensions;
+  }
+  
+  return FALSE;
+}
+
+static BOOL run_command_needs_quotes(const wchar_t *filename) {
+  for(; *filename; ++filename) {
+    switch(*filename) {
+      case L'(':
+      case L')':
+      case L' ':
+      case L'^':
+        return TRUE;
+    }
+  }
+  
+  return FALSE;
+}
+
+static void write_file_link(
+  const wchar_t *filename, 
+  const wchar_t *optional_owning_directory, 
+  const wchar_t *optional_text,
+  const wchar_t *optional_args, 
+  BOOL is_directory
+) {
+  wchar_t cmd[2 * MAX_PATH + 20];
+  
+  assert(filename != NULL);
+  if(optional_owning_directory && *optional_owning_directory == L'\0')
+    optional_owning_directory = NULL;
+  
+  if(is_directory) {
+    const wchar_t *final_baskslash;
+    
+    const wchar_t *end = filename;
+    while(*end)
+      ++end;
+    
+    if(end[-1] == L'\\')
+      final_baskslash = L"";
+    else
+      final_baskslash = L"\\";
+    
+    if(optional_owning_directory)
+      StringCbPrintfW(cmd, sizeof(cmd), L"cd+dir %s\\%s%s", optional_owning_directory, filename, final_baskslash);
+    else
+      StringCbPrintfW(cmd, sizeof(cmd), L"cd+dir %s%s", filename, final_baskslash);
+    
+    if(!optional_text)
+      optional_text = cmd + 7;
+      
+    write_simple_link(cmd, cmd, optional_text);
+  }
+  else if(has_any_extension(filename, _wgetenv(L"PATHEXT"))) {
+    BOOL need_quote;
+    const wchar_t *quote;
+    
+    need_quote = run_command_needs_quotes(filename);
+    if(!need_quote && optional_owning_directory)
+      need_quote = run_command_needs_quotes(optional_owning_directory);
+    
+    quote = need_quote ? L"\"" : L"";
+    
+    StringCbPrintfW(cmd, sizeof(cmd), L"run %s%s%s%s%s%s%s",
+        quote,
+        optional_owning_directory ? optional_owning_directory : L"",
+        optional_owning_directory ? L"\\" : L"",
+        filename,
+        quote,
+        (optional_args && *optional_args) ? L" " : L"",
+        optional_args ? optional_args : L"");
+        
+    if(!optional_text)
+      optional_text = cmd + 4;
+      
+    fflush(stdout);
+    start_hyperlink(cmd);
+    set_hyperlink_input_text(cmd);
+    set_hyperlink_color(run_link_color);
+    
+    write_unicode(optional_text);
+    
+    end_hyperlink();
+  }
+  else {
+    if(optional_owning_directory)
+      StringCbPrintfW(cmd, sizeof(cmd), L"open %s\\%s", optional_owning_directory, filename);
+    else
+      StringCbPrintfW(cmd, sizeof(cmd), L"open %s", filename);
+    
+    if(!optional_text)
+      optional_text = cmd + 5;
+      
+    fflush(stdout);
+    start_hyperlink(cmd);
+    set_hyperlink_input_text(cmd);
+    set_hyperlink_color(file_link_color);
+    
+    write_unicode(optional_text);
+    
+    end_hyperlink();
+  }
+}
+
 static void write_path_links(wchar_t *path, int start) {
   wchar_t link[MAX_PATH + 20];
   
@@ -72,8 +239,9 @@ static void write_path_links(wchar_t *path, int start) {
     ch = path[next];
     path[next] = L'\0';
     
-    StringCbPrintfW(link, sizeof(link), L"cd+dir %s\\", path);
-    write_simple_link(link, link, path + start);
+    write_file_link(path, NULL, path + start, NULL, TRUE);
+    //StringCbPrintfW(link, sizeof(link), L"cd+dir %s\\", path);
+    //write_simple_link(link, link, path + start);
     
     path[next] = ch;
     start = next;
@@ -163,7 +331,6 @@ static void print_reparse_point_info(const wchar_t *file, DWORD reparse_tag, BOO
     DWORD length;
     BOOL relative = FALSE;
     wchar_t dst_path[MAX_PATH];
-    wchar_t link[MAX_PATH + 20];
     
     if(reparse_tag == IO_REPARSE_TAG_SYMLINK) {
       DWORD offset = data.header.SymbolicLinkReparseBuffer.SubstituteNameOffset / sizeof(WCHAR);
@@ -180,8 +347,6 @@ static void print_reparse_point_info(const wchar_t *file, DWORD reparse_tag, BOO
     if((uint8_t*)(subs + length) <= (uint8_t*)&data + sizeof(data) &&
         length < MAX_PATH)
     {
-      const wchar_t *command = is_directory ? L"cd+dir" : L"open";
-      
       // e.g. \??\C:\...
       if( length >= 7 &&
           subs[0] == L'\\' &&
@@ -199,26 +364,17 @@ static void print_reparse_point_info(const wchar_t *file, DWORD reparse_tag, BOO
       memcpy(dst_path, subs, length * sizeof(wchar_t));
       dst_path[length] = L'\0';
       
+      printf(" [");
       if(relative) {
-        StringCbPrintfW(link, sizeof(link), L"%s %s\\..\\%s", command, file, dst_path);
+        wchar_t dst_fullpath[MAX_PATH];
+        
+        StringCbPrintfW(dst_fullpath, sizeof(dst_fullpath), L"%s\\..\\%s", file, dst_path);
+        
+        write_file_link(dst_fullpath, NULL, NULL, NULL, is_directory);
       }
       else {
-        StringCbPrintfW(link, sizeof(link), L"%s %s", command, dst_path);
+        write_file_link(dst_path, NULL, NULL, NULL, is_directory);
       }
-      
-      printf(" [");
-      //write_simple_link(link, link, dst_path);
-      
-      fflush(stdout);
-      start_hyperlink(link);
-      set_hyperlink_input_text(link);
-      if(!is_directory)
-        set_hyperlink_color(file_link_color);
-      
-      write_unicode(dst_path);
-      
-      end_hyperlink();
-      
       printf("]");
     }
   }
@@ -243,7 +399,7 @@ static void print_shortcut_info(const wchar_t *file) {
     pf = NULL;
     hr = IShellLinkW_QueryInterface(sl, &IID_IPersistFile, (void**)&pf);
     if(SUCCEEDED(hr)) {
-      
+    
       hr = IPersistFile_Load(pf, file, STGM_READ);
       if(SUCCEEDED(hr)) {
         wchar_t path[MAX_PATH];
@@ -251,34 +407,21 @@ static void print_shortcut_info(const wchar_t *file) {
         
         hr = IShellLinkW_GetPath(sl, path, ARRAYSIZE(path), &wfd, 0);
         if(hr == S_OK) {
-          wchar_t link[MAX_PATH + 20];
-          BOOL is_directory =( wfd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+          wchar_t args[MAX_PATH];
+          BOOL is_directory = ( wfd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
           
-          if(is_directory) {
-            StringCbPrintfW(link, sizeof(link), L"cd+dir %s", path);
-          }
-          else {
-            StringCbPrintfW(link, sizeof(link), L"open %s", path);
-          }
+          *args = L'\0';
+          hr = IShellLinkW_GetArguments(sl, args, ARRAYSIZE(args));
+          if(FAILED(hr)) 
+            *args = L'\0';
           
           printf(" [");
-          //write_simple_link(link, link, path);
-          
-          fflush(stdout);
-          start_hyperlink(link);
-          set_hyperlink_input_text(link);
-          if(!is_directory)
-            set_hyperlink_color(file_link_color);
-          
-          write_unicode(path);
-          
-          end_hyperlink();
-          
+          write_file_link(path, NULL, NULL, args, is_directory);
           printf("]");
           
         }
       }
-    
+      
       IPersistFile_Release(pf);
     }
     
@@ -286,27 +429,6 @@ static void print_shortcut_info(const wchar_t *file) {
   }
   
   CoUninitialize();
-}
-
-static const wchar_t *get_extension(const wchar_t *filename) {
-  const wchar_t *end = filename;
-  const wchar_t *ext;
-  
-  while(*end)
-    ++end;
-    
-  ext = end;
-  while(ext != filename) {
-    if(*ext == L'.')
-      return ext;
-    
-    if(*ext == L'\\' || *ext == L'/')
-      break;
-    
-    --ext;
-  }
-  
-  return end;
 }
 
 static void list_directory(void) {
@@ -342,6 +464,7 @@ static void list_directory(void) {
   
   do {
     wchar_t datetime_string[20];
+    BOOL is_directory = ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
     
     if(InterlockedOr(&interrupted, FALSE)) {
       FindClose(hFind);
@@ -365,7 +488,7 @@ static void list_directory(void) {
         
     write_unicode(datetime_string);
     
-    if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+    if (is_directory) {
       const char *kind = "<DIR>";
       ++num_directories;
       
@@ -377,12 +500,8 @@ static void list_directory(void) {
           kind = "<JUNCTION>";
         }
       }
-    
+      
       printf("    %-15s", kind);
-      
-      StringCbPrintfW(link, sizeof(link), L"cd+dir %s\\%s\\", path, ffd.cFileName);
-      
-      write_simple_link(link, link, ffd.cFileName);
     }
     else {
       ++num_files;
@@ -390,30 +509,21 @@ static void list_directory(void) {
       if(ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
         printf("    %-15s", "<SYMLINK>");
       }
-      else{
+      else {
         filesize.LowPart = ffd.nFileSizeLow;
         filesize.HighPart = ffd.nFileSizeHigh;
         printf("%18" PRIu64 " ", (uint64_t)filesize.QuadPart);
         
-        file_sizes+= (uint64_t)filesize.QuadPart;
+        file_sizes += (uint64_t)filesize.QuadPart;
       }
+    }
+    
+    write_file_link(ffd.cFileName, path, ffd.cFileName, NULL, is_directory);
+    
+    if(!is_directory && has_any_extension(ffd.cFileName, L".LNK")) {
+      StringCbPrintfW(link, sizeof(link), L"%s\\%s", path, ffd.cFileName);
       
-      StringCbPrintfW(link, sizeof(link), L"open %s\\%s", path, ffd.cFileName);
-      
-      fflush(stdout);
-      start_hyperlink(link);
-      set_hyperlink_input_text(link);
-      set_hyperlink_color(file_link_color);
-      
-      write_unicode(ffd.cFileName);
-      
-      end_hyperlink();
-      
-      if(wcsicmp(get_extension(ffd.cFileName), L".LNK") == 0) {
-        StringCbPrintfW(link, sizeof(link), L"%s\\%s", path, ffd.cFileName);
-        
-        print_shortcut_info(link);
-      }
+      print_shortcut_info(link);
     }
     
     if(ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
@@ -624,7 +734,7 @@ static void open_document(const wchar_t *arg) {
   success_flag = (uintptr_t)ShellExecuteW(NULL, NULL, filename, NULL, NULL, SW_SHOW);
   
   if(success_flag <= 32) {
-    printf("ShellExecute failed with %d.", (int)success_flag);
+    printf("Error %d in ShellExecuteW.\n", (int)success_flag);
   }
 }
 
