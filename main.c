@@ -1,3 +1,5 @@
+#define COBJMACROS
+
 #include "read-input.h"
 #include "memory-util.h"
 #include "hyperlink-output.h"
@@ -12,6 +14,12 @@
 #include <strsafe.h>
 
 #include <windows.h>
+#include <shlobj.h>
+
+
+#ifndef SYMLINK_FLAG_RELATIVE
+#  define SYMLINK_FLAG_RELATIVE  1
+#endif
 
 
 static WORD file_link_color = FOREGROUND_RED | FOREGROUND_GREEN;
@@ -219,6 +227,86 @@ static void print_reparse_point_info(const wchar_t *file, DWORD reparse_tag, BOO
   CloseHandle(hDir);
 }
 
+static void print_shortcut_info(const wchar_t *file) {
+  HRESULT hr;
+  IShellLinkW *sl;
+  IPersistFile *pf;
+  
+  CoInitialize(NULL);
+  
+  sl = NULL;
+  hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLinkW, (void**)&sl);
+  if(SUCCEEDED(hr)) {
+  
+    pf = NULL;
+    hr = IShellLinkW_QueryInterface(sl, &IID_IPersistFile, (void**)&pf);
+    if(SUCCEEDED(hr)) {
+      
+      hr = IPersistFile_Load(pf, file, STGM_READ);
+      if(SUCCEEDED(hr)) {
+        wchar_t path[MAX_PATH];
+        WIN32_FIND_DATAW wfd;
+        
+        hr = IShellLinkW_GetPath(sl, path, ARRAYSIZE(path), &wfd, 0);
+        if(hr == S_OK) {
+          wchar_t link[MAX_PATH + 20];
+          BOOL is_directory =( wfd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+          
+          if(is_directory) {
+            StringCbPrintfW(link, sizeof(link), L"cd+dir %s", path);
+          }
+          else {
+            StringCbPrintfW(link, sizeof(link), L"open %s", path);
+          }
+          
+          printf(" [");
+          //write_simple_link(link, link, path);
+          
+          fflush(stdout);
+          start_hyperlink(link);
+          set_hyperlink_input_text(link);
+          if(!is_directory)
+            set_hyperlink_color(file_link_color);
+          
+          write_unicode(path);
+          
+          end_hyperlink();
+          
+          printf("]");
+          
+        }
+      }
+    
+      IPersistFile_Release(pf);
+    }
+    
+    IShellLinkW_Release(sl);
+  }
+  
+  CoUninitialize();
+}
+
+static const wchar_t *get_extension(const wchar_t *filename) {
+  const wchar_t *end = filename;
+  const wchar_t *ext;
+  
+  while(*end)
+    ++end;
+    
+  ext = end;
+  while(ext != filename) {
+    if(*ext == L'.')
+      return ext;
+    
+    if(*ext == L'\\' || *ext == L'/')
+      break;
+    
+    --ext;
+  }
+  
+  return end;
+}
+
 static void list_directory(void) {
   WIN32_FIND_DATAW ffd;
   LARGE_INTEGER filesize;
@@ -305,6 +393,12 @@ static void list_directory(void) {
       write_unicode(ffd.cFileName);
       
       end_hyperlink();
+      
+      if(wcsicmp(get_extension(ffd.cFileName), L".LNK") == 0) {
+        StringCbPrintfW(link, sizeof(link), L"%s\\%s", path, ffd.cFileName);
+        
+        print_shortcut_info(link);
+      }
     }
     
     if(ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {

@@ -17,6 +17,8 @@
 				<Linker>
 					<Add library="shell32" />
 					<Add library="user32" />
+					<Add library="ole32" />
+					<Add library="uuid" />
 				</Linker>
 			</Target>
 			<Target title="x86-gcc-debug">
@@ -30,6 +32,8 @@
 				<Linker>
 					<Add library="shell32" />
 					<Add library="user32" />
+					<Add library="ole32" />
+					<Add library="uuid" />
 				</Linker>
 			</Target>
 			<Target title="x64-msvc-debug">
@@ -44,6 +48,8 @@
 					<Add option="/DEBUG" />
 					<Add library="shell32" />
 					<Add library="user32" />
+					<Add library="ole32" />
+					<Add library="uuid" />
 				</Linker>
 			</Target>
 		</Build>
