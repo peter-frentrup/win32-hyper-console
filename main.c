@@ -1,6 +1,7 @@
 #include "read-input.h"
 #include "memory-util.h"
 #include "hyperlink-output.h"
+#include "debug.h"
 
 #include <assert.h>
 #include <io.h>
@@ -89,6 +90,135 @@ static void change_directory(const wchar_t *command_rest) {
   printf("\\\n");
 }
 
+typedef struct _REPARSE_DATA_BUFFER {
+  ULONG  ReparseTag;
+  USHORT ReparseDataLength;
+  USHORT Reserved;
+  union {
+    struct {
+      USHORT SubstituteNameOffset;
+      USHORT SubstituteNameLength;
+      USHORT PrintNameOffset;
+      USHORT PrintNameLength;
+      ULONG  Flags;
+      WCHAR  PathBuffer[1];
+    } SymbolicLinkReparseBuffer;
+    struct {
+      USHORT SubstituteNameOffset;
+      USHORT SubstituteNameLength;
+      USHORT PrintNameOffset;
+      USHORT PrintNameLength;
+      WCHAR  PathBuffer[1];
+    } MountPointReparseBuffer;
+    struct {
+      UCHAR DataBuffer[1];
+    } GenericReparseBuffer;
+  };
+} REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
+
+static void print_reparse_point_info(const wchar_t *file, DWORD reparse_tag, BOOL is_directory) {
+  struct {
+    REPARSE_DATA_BUFFER header;
+    wchar_t _rest[MAX_PATH - 1];
+  } data;
+  BOOL success;
+  DWORD nOutBufferSize;
+  
+  HANDLE hDir = CreateFileW(
+      file,
+      0,
+      FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+      NULL,
+      OPEN_EXISTING,
+      FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
+      NULL);
+      
+  if(hDir ==  INVALID_HANDLE_VALUE) {
+    debug_printf(L"DeviceIoControl failed: %d at %s\n", (int)GetLastError(), file);
+    return;
+  }
+  
+  success = DeviceIoControl(
+      hDir,
+      FSCTL_GET_REPARSE_POINT,
+      NULL,
+      0,
+      &data,
+      sizeof(data),
+      &nOutBufferSize,
+      NULL);
+      
+  if(success) {
+    wchar_t *subs;
+    DWORD length;
+    BOOL relative = FALSE;
+    wchar_t dst_path[MAX_PATH];
+    wchar_t link[MAX_PATH + 20];
+    
+    if(reparse_tag == IO_REPARSE_TAG_SYMLINK) {
+      DWORD offset = data.header.SymbolicLinkReparseBuffer.SubstituteNameOffset / sizeof(WCHAR);
+      length       = data.header.SymbolicLinkReparseBuffer.SubstituteNameLength / sizeof(WCHAR);
+      subs         = data.header.SymbolicLinkReparseBuffer.PathBuffer + offset;
+      relative     = (data.header.SymbolicLinkReparseBuffer.Flags & SYMLINK_FLAG_RELATIVE) != 0;
+    }
+    else {
+      DWORD offset = data.header.MountPointReparseBuffer.SubstituteNameOffset / sizeof(WCHAR);
+      length       = data.header.MountPointReparseBuffer.SubstituteNameLength / sizeof(WCHAR);
+      subs         = data.header.MountPointReparseBuffer.PathBuffer + offset;
+    }
+    
+    if((uint8_t*)(subs + length) <= (uint8_t*)&data + sizeof(data) &&
+        length < MAX_PATH)
+    {
+      const wchar_t *command = is_directory ? L"cd+dir" : L"open";
+      
+      // e.g. \??\C:\...
+      if( length >= 7 &&
+          subs[0] == L'\\' &&
+          subs[1] == L'?' &&
+          subs[2] == L'?' &&
+          subs[3] == L'\\' &&
+          subs[4] != L'\0' &&
+          subs[5] == L':' &&
+          subs[6] == L'\\')
+      {
+        subs += 4;
+        length -= 4;
+      }
+      
+      memcpy(dst_path, subs, length * sizeof(wchar_t));
+      dst_path[length] = L'\0';
+      
+      if(relative) {
+        StringCbPrintfW(link, sizeof(link), L"%s %s\\..\\%s", command, file, dst_path);
+      }
+      else {
+        StringCbPrintfW(link, sizeof(link), L"%s %s", command, dst_path);
+      }
+      
+      printf(" [");
+      //write_simple_link(link, link, dst_path);
+      
+      fflush(stdout);
+      start_hyperlink(link);
+      set_hyperlink_input_text(link);
+      if(!is_directory)
+        set_hyperlink_color(file_link_color);
+      
+      write_unicode(dst_path);
+      
+      end_hyperlink();
+      
+      printf("]");
+    }
+  }
+  else {
+    debug_printf(L"DeviceIoControl failed: %d at %s\n", (int)GetLastError(), file);
+  }
+  
+  CloseHandle(hDir);
+}
+
 static void list_directory(void) {
   WIN32_FIND_DATAW ffd;
   LARGE_INTEGER filesize;
@@ -111,7 +241,7 @@ static void list_directory(void) {
   
   hFind = FindFirstFileW(path, &ffd);
   if(hFind == INVALID_HANDLE_VALUE) {
-    printf("FindFirstFileW\n");
+    printf("Error %d in FindFirstFileW\n", (int)GetLastError());
     return;
   }
   
@@ -138,16 +268,32 @@ static void list_directory(void) {
     write_unicode(datetime_string);
     
     if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-      printf("    <DIR>          ");
+      const char *kind = "<DIR>";
+      
+      if(ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+        if(ffd.dwReserved0 == IO_REPARSE_TAG_SYMLINK) {
+          kind = "<SYMLINKD>";
+        }
+        else {
+          kind = "<JUNCTION>";
+        }
+      }
+    
+      printf("    %-15s", kind);
       
       StringCbPrintfW(link, sizeof(link), L"cd+dir %s\\%s\\", path, ffd.cFileName);
       
       write_simple_link(link, link, ffd.cFileName);
     }
     else {
-      filesize.LowPart = ffd.nFileSizeLow;
-      filesize.HighPart = ffd.nFileSizeHigh;
-      printf("%18" PRIu64 " ", (uint64_t)filesize.QuadPart);
+      if(ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+        printf("    %-15s", "<SYMLINK>");
+      }
+      else{
+        filesize.LowPart = ffd.nFileSizeLow;
+        filesize.HighPart = ffd.nFileSizeHigh;
+        printf("%18" PRIu64 " ", (uint64_t)filesize.QuadPart);
+      }
       
       StringCbPrintfW(link, sizeof(link), L"open %s\\%s", path, ffd.cFileName);
       
@@ -159,6 +305,12 @@ static void list_directory(void) {
       write_unicode(ffd.cFileName);
       
       end_hyperlink();
+    }
+    
+    if(ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+      StringCbPrintfW(link, sizeof(link), L"%s\\%s", path, ffd.cFileName);
+      
+      print_reparse_point_info(link, ffd.dwReserved0, ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
     }
     
     printf("\n");
@@ -379,7 +531,7 @@ static void goto_bottom(void) {
 }
 
 static void show_help(void) {
-  
+
   printf("Available commands\n");
   
   write_simple_link(L"scroll to window bottom", L"bottom", L"bottom");
