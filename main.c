@@ -9,6 +9,7 @@
 #include <io.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strsafe.h>
@@ -23,6 +24,7 @@
 
 
 static WORD file_link_color = FOREGROUND_RED | FOREGROUND_GREEN;
+static long interrupted = FALSE;
 
 
 static void write_unicode(const wchar_t *str) {
@@ -313,6 +315,9 @@ static void list_directory(void) {
   wchar_t path[MAX_PATH];
   wchar_t link[MAX_PATH + 20];
   DWORD length;
+  unsigned num_files = 0;
+  unsigned num_directories = 0;
+  uint64_t file_sizes = 0;
   
   HANDLE hFind = INVALID_HANDLE_VALUE;
   
@@ -338,6 +343,11 @@ static void list_directory(void) {
   do {
     wchar_t datetime_string[20];
     
+    if(InterlockedOr(&interrupted, FALSE)) {
+      FindClose(hFind);
+      return;
+    }
+    
     FILETIME filetime = ffd.ftCreationTime;
     SYSTEMTIME datetime;
     
@@ -357,6 +367,7 @@ static void list_directory(void) {
     
     if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
       const char *kind = "<DIR>";
+      ++num_directories;
       
       if(ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
         if(ffd.dwReserved0 == IO_REPARSE_TAG_SYMLINK) {
@@ -374,6 +385,8 @@ static void list_directory(void) {
       write_simple_link(link, link, ffd.cFileName);
     }
     else {
+      ++num_files;
+      
       if(ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
         printf("    %-15s", "<SYMLINK>");
       }
@@ -381,6 +394,8 @@ static void list_directory(void) {
         filesize.LowPart = ffd.nFileSizeLow;
         filesize.HighPart = ffd.nFileSizeHigh;
         printf("%18" PRIu64 " ", (uint64_t)filesize.QuadPart);
+        
+        file_sizes+= (uint64_t)filesize.QuadPart;
       }
       
       StringCbPrintfW(link, sizeof(link), L"open %s\\%s", path, ffd.cFileName);
@@ -409,6 +424,9 @@ static void list_directory(void) {
     
     printf("\n");
   } while(FindNextFileW(hFind, &ffd) != 0);
+  
+  printf("%16u File(s), %16" PRIu64 " Bytes\n", num_files, file_sizes);
+  printf("%16u Directories\n", num_directories);
 }
 
 static BOOL first_word_equals(const wchar_t *str, const wchar_t *word) {
@@ -673,9 +691,17 @@ static void show_help(void) {
   printf("\nYou can use keyboard shortcuts Ctrl+C, Ctrl+X, Ctrl+V to access the clipboard.\n");
 }
 
+static void handle_sigint(int sig) {
+  signal(sig, handle_sigint);
+  
+  InterlockedExchange(&interrupted, TRUE);
+}
+
 int main() {
   BOOL multiline_mode = FALSE;
   wchar_t *str = NULL;
+  
+  signal(SIGINT, handle_sigint);
   
   init_hyperlink_system();
   
@@ -693,6 +719,8 @@ int main() {
   printf("'\n");
   
   for(;;) {
+    InterlockedExchange(&interrupted, FALSE);
+    
     //printf("\ntype ");
     //write_simple_link(L"need help?", L"help", L"something");
     //printf(": ");
