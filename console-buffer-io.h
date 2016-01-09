@@ -52,6 +52,8 @@ void console_clean_lines(HANDLE hConsoleOutput, int num_lines);
 
 BOOL console_scroll_wheel(HANDLE hConsoleOutput, const MOUSE_EVENT_RECORD *er);
 
+BOOL console_scroll_key(HANDLE hConsoleOutput, const KEY_EVENT_RECORD *er);
+
 void console_paste_from_clipboard(HANDLE hConsoleInput);
 
 BOOL console_get_screen_word_start_end(HANDLE hConsoleOutput, COORD pos, COORD *start, COORD *end);

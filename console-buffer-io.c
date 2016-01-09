@@ -477,6 +477,65 @@ BOOL console_scroll_wheel(HANDLE hConsoleOutput, const MOUSE_EVENT_RECORD *er) {
   return FALSE;
 }
 
+BOOL console_scroll_key(HANDLE hConsoleOutput, const KEY_EVENT_RECORD *er) {
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  int scoll_delta = 0;
+  
+  assert(er != NULL);
+  
+  if(!er->bKeyDown) 
+    return FALSE;
+  
+  memset(&csbi, 0, sizeof(csbi));
+  if(!GetConsoleScreenBufferInfo(hConsoleOutput, &csbi)) 
+    return FALSE;
+  
+  switch(er->wVirtualKeyCode) {
+    case VK_UP:
+      if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+        scoll_delta = -1;
+      }
+      break;
+      
+    case VK_DOWN:
+      if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+        scoll_delta = 1;
+      }
+      break;
+    
+    case VK_PRIOR:
+      if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+        scoll_delta = -(csbi.srWindow.Bottom - csbi.srWindow.Top + 1);
+      }
+      break;
+    
+    case VK_NEXT:
+      if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+        scoll_delta = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+      }
+      break;
+  }
+  
+  if(scoll_delta) {
+    csbi.srWindow.Top += scoll_delta;
+    csbi.srWindow.Bottom += scoll_delta;
+    
+    if(csbi.srWindow.Top < 0) {
+      csbi.srWindow.Bottom += (0 - csbi.srWindow.Top);
+      csbi.srWindow.Top = 0;
+    }
+    else if(csbi.srWindow.Bottom >= csbi.dwSize.Y) {
+      csbi.srWindow.Top += (csbi.dwSize.Y - 1 - csbi.srWindow.Bottom);
+      csbi.srWindow.Bottom = csbi.dwSize.Y - 1;
+    }
+    
+    SetConsoleWindowInfo(hConsoleOutput, TRUE, &csbi.srWindow);
+    return TRUE;
+  }
+  
+  return FALSE;
+}
+
 
 static BOOL flush_input(struct send_input_t *context) {
   DWORD written;

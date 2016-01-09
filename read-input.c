@@ -1232,6 +1232,13 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
     case VK_END:
       move_end(con, er->dwControlKeyState & SHIFT_PRESSED);
       return;
+    
+    case VK_UP:
+    case VK_DOWN:
+    case VK_PRIOR:
+    case VK_NEXT:
+      console_scroll_key(con->output_handle, er);
+      return;
       
     case 'A': // Ctrl+A
       if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {

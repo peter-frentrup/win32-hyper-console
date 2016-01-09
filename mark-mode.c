@@ -488,20 +488,28 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
         return TRUE;
         
       case VK_UP:
-        cm->follow_cursor = TRUE;
-        cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
-        move_selection_up(
-          cm,
-          er->dwControlKeyState & SHIFT_PRESSED);
+        if(!console_scroll_key(cm->output_handle, er)) {
+          cm->follow_cursor = TRUE;
+          cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
+          move_selection_up(
+            cm,
+            er->dwControlKeyState & SHIFT_PRESSED);
+        }
         return TRUE;
         
       case VK_DOWN:
-        cm->follow_cursor = TRUE;
-        cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
-        move_selection_down(
-          cm,
-          er->dwControlKeyState & SHIFT_PRESSED);
+        if(!console_scroll_key(cm->output_handle, er)) {
+          cm->follow_cursor = TRUE;
+          cm->block_mode = 0 != (er->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED));
+          move_selection_down(
+            cm,
+            er->dwControlKeyState & SHIFT_PRESSED);
+        }
         return TRUE;
+      
+      case VK_PRIOR:
+      case VK_NEXT:
+       return console_scroll_key(cm->output_handle, er);
         
       case 'A': // Ctrl+A
         if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
