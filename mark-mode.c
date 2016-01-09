@@ -670,8 +670,6 @@ static BOOL run_mark_mode(struct console_mark_t *cm, INPUT_RECORD *event) {
     if(!ReadConsoleInputW(cm->input_handle, event, 1, &num_read) || num_read < 1)
       return TRUE;
   };
-  
-  return FALSE;
 }
 
 static void finish_mark_mode(struct console_mark_t *cm) {

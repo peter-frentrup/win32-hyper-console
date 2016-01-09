@@ -812,8 +812,6 @@ static BOOL hs_handle_events(struct hyperlink_collection_t *hc, INPUT_RECORD *ev
     if(!ReadConsoleInputW(input_handle, event, 1, &num_read) || num_read < 1)
       return TRUE;
   };
-  
-  return FALSE;
 }
 
 static void hs_start_input(struct hyperlink_collection_t *hc, int console_width, int pre_input_lines) {
