@@ -569,7 +569,9 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
     }
   }
   
-  console_alert(cm->output_handle);
+  if(cm->active)
+    console_alert(cm->output_handle);
+  
   cm->stop = TRUE;
   return FALSE;
 }
