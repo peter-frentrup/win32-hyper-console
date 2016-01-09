@@ -859,7 +859,7 @@ static void hs_end_input(struct hyperlink_collection_t *hc) {
 static void hs_print_debug_info(struct hyperlink_collection_t *hc) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   COORD pos;
-  int link_count;
+  int link_count = 0;
   
   assert(hc != NULL);
   
