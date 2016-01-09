@@ -1142,19 +1142,13 @@ static void change_console_size(struct console_input_t *con, int delta_columns) 
   csbiex.srWindow.Right = csbiex.dwSize.X;
   
   if(!SetConsoleScreenBufferInfoEx(con->output_handle, &csbiex)) {
-    wchar_t buffer[100];
-    StringCbPrintfW(buffer, sizeof(buffer), L"SetConsoleScreenBufferInfoEx failed: %d", (unsigned)GetLastError() );
-    
-    OutputDebugStringW(buffer);
+    debug_printf(L"SetConsoleScreenBufferInfoEx failed: %d", (unsigned)GetLastError());
   }
   
   // I have no idea why this is necessary, but otherwise, the console keeps shrinking.
   csbiex.srWindow.Bottom = rect.Bottom + 1;
   if(!SetConsoleScreenBufferInfoEx(con->output_handle, &csbiex)) {
-    wchar_t buffer[100];
-    StringCbPrintfW(buffer, sizeof(buffer), L"2 SetConsoleScreenBufferInfoEx failed: %d", (unsigned)GetLastError() );
-    
-    OutputDebugStringW(buffer);
+    debug_printf(L"SetConsoleScreenBufferInfoEx failed: %d", (unsigned)GetLastError());
   }
   
   
