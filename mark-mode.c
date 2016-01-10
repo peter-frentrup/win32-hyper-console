@@ -2,6 +2,7 @@
 #include "console-buffer-io.h"
 #include "debug.h"
 #include "memory-util.h"
+#include "search-mode.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -37,6 +38,7 @@ struct console_mark_t {
   unsigned block_mode: 1;
   unsigned mouse_down: 1;
   unsigned follow_cursor: 1;
+  unsigned continue_with_search: 1;
 };
 
 static BOOL have_selected_output(struct console_mark_t *cm);
@@ -557,6 +559,13 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
           return TRUE;
         }
         break;
+        
+      case 'F': // Ctrl+F
+        if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+          cm->continue_with_search = TRUE;
+          return TRUE;
+        }
+        break;
       
       case VK_BACK:
       case VK_DELETE:
@@ -666,9 +675,25 @@ static BOOL run_mark_mode(struct console_mark_t *cm, INPUT_RECORD *event) {
     
     if(!cm->active || cm->stop)
       return TRUE;
-      
+    
     if(!ReadConsoleInputW(cm->input_handle, event, 1, &num_read) || num_read < 1)
       return TRUE;
+      
+    if(cm->continue_with_search) {
+      wchar_t *filter;
+      int length;
+      
+      cm->continue_with_search = FALSE;
+      
+      if(cm->block_mode)
+        filter = get_selection_block_lines(cm, &length);
+      else
+        filter = get_selection_lines(cm, &length);
+      
+      console_handle_search_mode(cm->input_handle, cm->output_handle, event, filter);
+      
+      free_memory(filter);
+    }
   };
 }
 

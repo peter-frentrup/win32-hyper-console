@@ -87,6 +87,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="scroll-counter.h" />
+		<Unit filename="search-mode.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="search-mode.h" />
 		<Unit filename="text-util.c">
 			<Option compilerVar="CC" />
 		</Unit>

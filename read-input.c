@@ -6,6 +6,7 @@
 #include "console-buffer-io.h"
 #include "debug.h"
 #include "mark-mode.h"
+#include "search-mode.h"
 #include "text-util.h"
 
 #include <assert.h>
@@ -64,6 +65,7 @@ struct console_input_t {
   unsigned stop: 1;
   unsigned ignore_input_when_stopped: 1;
   unsigned redo_in_mark_mode: 1;
+  unsigned continue_with_search: 1;
 };
 
 static BOOL is_console(HANDLE handle);
@@ -1294,6 +1296,13 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
         return;
       }
       break;
+    
+    case 'F': // Ctrl+F
+      if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+        con->continue_with_search = TRUE;
+        return;
+      }
+      break;
       
     case VK_TAB:
       delete_selection_no_update(con);
@@ -1596,10 +1605,35 @@ static BOOL input_loop(struct console_input_t *con) {
       con->error = "ReadConsoleInputW";
       break;
     }
+      
+    if(con->continue_with_search) {
+      wchar_t *filter;
+      BOOL event_eaten;
+      int start = MIN(con->input_anchor, con->input_pos);
+      int end   = MAX(con->input_anchor, con->input_pos);
+      int length = end - start;
+      
+      con->continue_with_search = FALSE;
+      
+      filter = allocate_memory((length + 1) * sizeof(wchar_t));
+      if(filter) {
+        memcpy(filter, con->input_text + start, length * sizeof(wchar_t));
+        filter[length] = L'\0';
+        
+        event_eaten = console_handle_search_mode(con->input_handle, con->output_handle, &event, filter);
+        
+        free_memory(filter);
+        if(event_eaten)
+          continue;
+      }
+    }
     
     if(!is_mouse_event_inside_edit_region(con, &event)) {
       if(hyperlink_system_handle_events(&event))
         continue;
+        
+//      if(console_handle_search_mode(con->input_handle, con->output_handle, &event, NULL))
+//        continue;
         
       if(console_handle_mark_mode(con->input_handle, con->output_handle, &event, FALSE))
         continue;
