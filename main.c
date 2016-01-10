@@ -145,19 +145,35 @@ static void write_file_link(
     optional_owning_directory = NULL;
     
   if(is_directory) {
-    const wchar_t *final_baskslash;
+    const wchar_t *final_baskslash = L"\\";
     
-    const wchar_t *end = filename;
-    while(*end)
-      ++end;
+    if(filename) {
+      const wchar_t *end = filename;
+      while(*end)
+        ++end;
+        
+      if(end[-1] == L'\\')
+        final_baskslash = L"";
+    }
+    
+    if(optional_owning_directory) {
+      const wchar_t *dir_baskslash = L"\\";
       
-    if(end[-1] == L'\\')
-      final_baskslash = L"";
-    else
-      final_baskslash = L"\\";
+      if(*optional_owning_directory) {
+        const wchar_t *end = optional_owning_directory;
+        while(*end)
+          ++end;
+        
+        if(end[-1] == L'\\')
+          dir_baskslash = L"";
+      }
       
-    if(optional_owning_directory)
-      StringCbPrintfW(cmd, sizeof(cmd), L"cd+dir %s\\%s%s", optional_owning_directory, filename, final_baskslash);
+      StringCbPrintfW(cmd, sizeof(cmd), L"cd+dir %s%s%s%s", 
+        optional_owning_directory, 
+        dir_baskslash,
+        filename, 
+        final_baskslash);
+    }
     else
       StringCbPrintfW(cmd, sizeof(cmd), L"cd+dir %s%s", filename, final_baskslash);
       
