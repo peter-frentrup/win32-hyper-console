@@ -1097,16 +1097,10 @@ static void copy_to_clipboard(struct console_input_t *con) {
   assert(con != NULL);
   if(con->error)
     return;
-    
-  if(con->input_anchor < con->input_pos) {
-    start = con->input_anchor;
-    end = con->input_pos;
-  }
-  else if(con->input_pos < con->input_anchor) {
-    start = con->input_pos;
-    end = con->input_anchor;
-  }
-  else
+  
+  start = MIN(con->input_anchor, con->input_pos);
+  end   = MAX(con->input_anchor, con->input_pos);
+  if(start == end)
     return;
     
   if(!OpenClipboard(NULL))

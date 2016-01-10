@@ -31,8 +31,10 @@ struct console_search_t {
   wchar_t *screen;
   WORD *attributes;
   
-  COORD     original_pos;
-  wchar_t  *oritinal_title;
+  COORD                last_result_pos;
+  COORD                original_pos;
+  wchar_t             *oritinal_title;
+  CONSOLE_CURSOR_INFO  original_cursor;
   
   WORD *highlight_attributes;
   int highlight_attributes_capacity;
@@ -77,6 +79,8 @@ static void update_filter_selection(struct console_search_t *cs);
 static void set_filter_title(struct console_search_t *cs);
 static void goto_result(struct console_search_t *cs);
 static void goto_next_result(struct console_search_t *cs, BOOL forward);
+
+static void copy_filter_selection_to_clipboard(struct console_search_t *cs);
 
 static BOOL start_search_mode(struct console_search_t *cs);
 
@@ -223,6 +227,8 @@ static void find_all_at(struct console_search_t *cs, COORD pos) {
         &written);
     }
     
+    cs->last_result_pos = tmp->position;
+    
     console_write_output_attribute(
       cs->output_handle, 
       cs->result_attributes, 
@@ -299,11 +305,12 @@ static void extended_filter(struct console_search_t *cs, int old_length) {
   }
   
   if(cs->current_result) {
+    cs->last_result_pos = cs->current_result->position;
     console_write_output_attribute(
       cs->output_handle, 
       cs->result_attributes, 
       cs->filter_length,
-      cs->current_result->position,
+      cs->last_result_pos,
       &written);
   }
 }
@@ -357,7 +364,7 @@ static void truncated_filter(struct console_search_t *cs, int old_length) {
     cs->current_result = NULL;
   }
   else
-    pos = cs->original_pos;
+    pos = cs->last_result_pos;
   
   find_all_at(cs, pos);
 }
@@ -400,7 +407,7 @@ static void reset_filter(struct console_search_t *cs, int old_length) {
     cs->current_result = NULL;
   }
   else
-    pos = cs->original_pos;
+    pos = cs->last_result_pos;
   
   find_all_at(cs, pos);
 }
@@ -675,20 +682,21 @@ static void set_filter_title(struct console_search_t *cs) {
 }
 
 static void goto_result(struct console_search_t *cs) {
+  COORD pos;
+  
   assert(cs != NULL);
   
+  pos = cs->last_result_pos;
   if(cs->current_result) {
-    COORD pos = cs->current_result->position;
-    
-//    int index = MIN(cs->filter_pos, cs->filter_anchor);
-//    if(index > 0) {
-//      index += pos.Y * cs->console_size.X + pos.X;
-//      pos.Y = index / cs->console_size.X;
-//      pos.X = index % cs->console_size.X;
-//    }
-    
-    SetConsoleCursorPosition(cs->output_handle, pos);
+    int index = MIN(cs->filter_pos, cs->filter_anchor);
+    if(index > 0) {
+      index += pos.Y * cs->console_size.X + pos.X;
+      pos.Y = index / cs->console_size.X;
+      pos.X = index % cs->console_size.X;
+    }
   }
+  
+  SetConsoleCursorPosition(cs->output_handle, pos);
 }
 
 static void goto_next_result(struct console_search_t *cs, BOOL forward) {
@@ -715,6 +723,7 @@ static void goto_next_result(struct console_search_t *cs, BOOL forward) {
       &written);
     
     cs->current_result = result;
+    cs->last_result_pos = result->position;
     goto_result(cs);
   }
   else {
@@ -723,9 +732,43 @@ static void goto_next_result(struct console_search_t *cs, BOOL forward) {
 }
 
 
+static void copy_filter_selection_to_clipboard(struct console_search_t *cs) {
+  int start;
+  int end;
+  HGLOBAL copy_handle;
+  wchar_t *copy_data;
+  
+  assert(cs != NULL);
+    
+  start = MIN(cs->filter_anchor, cs->filter_pos);
+  end   = MAX(cs->filter_anchor, cs->filter_pos);
+  
+  if(start == end)
+    return;
+    
+  if(!OpenClipboard(NULL))
+    return;
+    
+  copy_handle = GlobalAlloc(GMEM_MOVEABLE, (end - start + 1) * sizeof(wchar_t));
+  if(!copy_handle) {
+    CloseClipboard();
+    return;
+  }
+  
+  copy_data = GlobalLock(copy_handle);
+  memcpy(copy_data, cs->filter_text + start, (end - start) * sizeof(wchar_t));
+  copy_data[end - start] = L'\0';
+  GlobalUnlock(copy_handle);
+  
+  SetClipboardData(CF_UNICODETEXT, copy_handle);
+  
+  CloseClipboard();
+}
+
 
 static BOOL start_search_mode(struct console_search_t *cs) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
+  CONSOLE_CURSOR_INFO cci;
   
   assert(cs != NULL);
   
@@ -778,6 +821,10 @@ static BOOL start_search_mode(struct console_search_t *cs) {
   }
   
   set_filter_title(cs);
+  
+  cci.bVisible = TRUE;
+  cci.dwSize = 100;
+  SetConsoleCursorInfo(cs->output_handle, &cci);
     
   return TRUE;
 }
@@ -860,13 +907,52 @@ static BOOL search_mode_handle_key_event(struct console_search_t *cs, KEY_EVENT_
         }
         break;
       
-      case VK_INSERT: // Shift+Ins = paste
+      case VK_INSERT: // Ctrl+Ins = copy, Shift+Ins = paste
+        if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+          if(cs->filter_anchor != cs->filter_pos) {
+            copy_filter_selection_to_clipboard(cs);
+            return TRUE;
+          }
+          else { // empty selection -> beep
+            console_alert(cs->output_handle);
+            return TRUE;
+          }
+        }
         if(er->dwControlKeyState & SHIFT_PRESSED) {
           console_paste_from_clipboard(cs->input_handle);
           return TRUE;
         }
         break;
         
+      case 'C': // Ctrl+C
+        if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+          if(cs->filter_anchor != cs->filter_pos) {
+            copy_filter_selection_to_clipboard(cs);
+            cs->filter_anchor = cs->filter_pos;
+            update_filter_selection(cs);
+            return TRUE;
+          }
+          else { // empty selection -> beep
+            console_alert(cs->output_handle);
+            return TRUE;
+          }
+        }
+        break;
+        
+      case 'X': // Ctrl+C
+        if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+          if(cs->filter_anchor != cs->filter_pos) {
+            copy_filter_selection_to_clipboard(cs);
+            remove_filter_selection(cs);
+            return TRUE;
+          }
+          else { // empty selection -> beep
+            console_alert(cs->output_handle);
+            return TRUE;
+          }
+        }
+        break;
+      
       case 'V': // Ctrl+V
         if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
           console_paste_from_clipboard(cs->input_handle);
@@ -966,6 +1052,7 @@ static BOOL run_search_mode(struct console_search_t *cs, INPUT_RECORD *event) {
 
 static void finish_search_mode(struct console_search_t *cs) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
+  CONSOLE_CURSOR_INFO cci;
   
   assert(cs != NULL);
   
@@ -1018,6 +1105,12 @@ static void finish_search_mode(struct console_search_t *cs) {
         SetConsoleWindowInfo(cs->output_handle, TRUE, &csbi.srWindow);
     }
   }
+  
+  cci = cs->original_cursor;
+  GetConsoleCursorInfo(cs->output_handle, &cci);
+  if(0 != memcmp(&cci, &cs->original_cursor, sizeof(cci))) {
+    SetConsoleCursorInfo(cs->output_handle, &cs->original_cursor);
+  }
 }
 
 BOOL console_handle_search_mode(HANDLE hConsoleInput, HANDLE hConsoleOutput, INPUT_RECORD *event, const wchar_t *filter) {
@@ -1036,8 +1129,12 @@ BOOL console_handle_search_mode(HANDLE hConsoleInput, HANDLE hConsoleOutput, INP
   if(!GetConsoleScreenBufferInfo(hConsoleOutput, &csbi))
     return FALSE;
     
-  cs->console_size = csbi.dwSize;
-  cs->original_pos = csbi.dwCursorPosition;
+  if(!GetConsoleCursorInfo(hConsoleOutput, &cs->original_cursor))
+    return FALSE;
+    
+  cs->console_size    = csbi.dwSize;
+  cs->original_pos    = csbi.dwCursorPosition;
+  cs->last_result_pos = csbi.dwCursorPosition;
   
   if(filter) {
     int length = wcslen(filter);
@@ -1049,8 +1146,8 @@ BOOL console_handle_search_mode(HANDLE hConsoleInput, HANDLE hConsoleOutput, INP
       cs->filter_pos = length;
     }
     
-    set_filter_title(cs);
-    find_all_at(cs, cs->original_pos);
+    reset_filter(cs, 0);
+    update_filter_selection(cs);
   }
   
   result = run_search_mode(cs, event);
