@@ -548,6 +548,8 @@ static void list_directory(void) {
     printf("\n");
   } while(FindNextFileW(hFind, &ffd) != 0);
   
+  FindClose(hFind);
+  
   printf("%16u File(s), %16" PRIu64 " Bytes\n", num_files, file_sizes);
   printf("%16u Directories\n", num_directories);
 }
@@ -573,10 +575,8 @@ static BOOL find_next_directory(HANDLE *hFind, WIN32_FIND_DATAW *ffd) {
     return FALSE;
   
   while(FindNextFileW(*hFind, ffd)) {
-    if(InterlockedOr(&interrupted, FALSE)) {
-      FindClose(*hFind);
+    if(InterlockedOr(&interrupted, FALSE)) 
       break;
-    }
     
     if(ffd->dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)
       continue;
@@ -585,6 +585,7 @@ static BOOL find_next_directory(HANDLE *hFind, WIN32_FIND_DATAW *ffd) {
       return TRUE;
   }
   
+  FindClose(*hFind);
   *hFind = INVALID_HANDLE_VALUE;
   ffd->cFileName[0] = L'\0';
   
