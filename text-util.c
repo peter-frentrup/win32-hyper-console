@@ -124,3 +124,16 @@ int console_get_word_end(const wchar_t *text, int text_length, int pos) {
   
   return pos;
 }
+
+
+
+wchar_t *append_text(wchar_t *dst, const wchar_t *dst_end, const wchar_t *src, const wchar_t *optional_src_end) {
+  assert(dst != NULL);
+  assert(dst_end != NULL);
+  assert(src != NULL);
+  
+  while(dst != dst_end && *src && src != optional_src_end)
+    *dst++ = *src++;
+  
+  return dst;
+}

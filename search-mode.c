@@ -569,17 +569,6 @@ static BOOL remove_filter_selection(struct console_search_t *cs) {
   return TRUE;
 }
 
-static wchar_t *append(wchar_t *dst, const wchar_t *dst_end, const wchar_t *src, const wchar_t *optional_src_end) {
-  assert(dst != NULL);
-  assert(dst_end != NULL);
-  assert(src != NULL);
-  
-  while(dst != dst_end && *src && src != optional_src_end)
-    *dst++ = *src++;
-  
-  return dst;
-}
-
 
 static void move_filter_selection_left(struct console_search_t *cs, BOOL fix_anchor, BOOL jump_word) {
   int new_pos;
@@ -657,24 +646,24 @@ static void set_filter_title(struct console_search_t *cs) {
   if(!cs->oritinal_title)
     return;
   
-  s = append(s, end, L"Find ", NULL);
+  s = append_text(s, end, L"Find ", NULL);
   if(cs->filter_text) {
     int sel_start = MIN(cs->filter_pos, cs->filter_anchor);
     int sel_end   = MAX(cs->filter_pos, cs->filter_anchor);
     
-    s = append(s, end, cs->filter_text, cs->filter_text + sel_start);
+    s = append_text(s, end, cs->filter_text, cs->filter_text + sel_start);
     if(sel_start == sel_end) {
-      s = append(s, end, L"|", NULL);
+      s = append_text(s, end, L"|", NULL);
     }
     else {
-      s = append(s, end, L"[", NULL);
+      s = append_text(s, end, L"[", NULL);
       
-      s = append(s, end, cs->filter_text + sel_start, cs->filter_text + sel_end);
+      s = append_text(s, end, cs->filter_text + sel_start, cs->filter_text + sel_end);
       
-      s = append(s, end, L"]", NULL);
+      s = append_text(s, end, L"]", NULL);
     }
     
-    s = append(s, end, cs->filter_text + sel_end, cs->filter_text + cs->filter_length);
+    s = append_text(s, end, cs->filter_text + sel_end, cs->filter_text + cs->filter_length);
   }
   *s = L'\0';
   
