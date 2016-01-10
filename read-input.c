@@ -1254,7 +1254,7 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
       }
       break;
       
-    case VK_INSERT:
+    case VK_INSERT: // Ctrl+Ins = copy, Shift+Ins = paste
       if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
         copy_to_clipboard(con);
         return;

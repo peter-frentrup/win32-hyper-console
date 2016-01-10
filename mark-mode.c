@@ -536,6 +536,18 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
         
         cm->stop = TRUE;
         return TRUE;
+       
+      case VK_INSERT: // Ctrl+Ins = copy
+        if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+          if(have_selected_output(cm))
+            copy_output_to_clipboard(cm);
+          else
+            console_alert(cm->output_handle);
+          
+          cm->stop = TRUE;
+          return TRUE;
+        }
+        break;
         
       case 'C': // Ctrl+C
         if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {

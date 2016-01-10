@@ -586,6 +586,13 @@ static BOOL search_mode_handle_key_event(struct console_search_t *cs, KEY_EVENT_
         }
         break;
       
+      case VK_INSERT: // Shift+Ins = paste
+        if(er->dwControlKeyState & SHIFT_PRESSED) {
+          console_paste_from_clipboard(cs->input_handle);
+          return TRUE;
+        }
+        break;
+        
       case 'V': // Ctrl+V
         if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
           console_paste_from_clipboard(cs->input_handle);
