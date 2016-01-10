@@ -1,6 +1,7 @@
 #include "search-mode.h"
 #include "console-buffer-io.h"
 #include "memory-util.h"
+#include "text-util.h"
 
 #include <assert.h>
 #include <strsafe.h>
@@ -9,6 +10,10 @@
 #ifndef MOUSE_HWHEELED
 #  define MOUSE_HWHEELED 0x0008
 #endif
+
+
+#define MIN(A, B)  ((A) < (B) ? (A) : (B))
+#define MAX(A, B)  ((A) > (B) ? (A) : (B))
 
 
 struct match_t {
@@ -39,6 +44,9 @@ struct console_search_t {
   int filter_length;
   int filter_capacity;
   
+  int filter_anchor;
+  int filter_pos;
+  
   struct match_t *current_result;
   
   WORD highlight_attr;
@@ -55,11 +63,17 @@ static struct match_t *find_all_within(struct console_search_t *cs, int start, i
 static void find_all_at(struct console_search_t *cs, COORD pos);
 static void extended_filter(struct console_search_t *cs, int old_length);
 static void truncated_filter(struct console_search_t *cs, int old_length);
+static void reset_filter(struct console_search_t *cs, int old_length);
 
 static BOOL resize_filter_text(struct console_search_t *cs, int length);
+static BOOL raw_edit_filter_selection(struct console_search_t *cs, const wchar_t *ins, int ins_length);
 static BOOL add_filter_char(struct console_search_t *cs, wchar_t ch);
-static BOOL remove_filter_char(struct console_search_t *cs);
+static BOOL remove_filter_selection(struct console_search_t *cs);
 
+static void move_filter_selection_left(struct console_search_t *cs, BOOL fix_anchor, BOOL jump_word);
+static void move_filter_selection_right(struct console_search_t *cs, BOOL fix_anchor, BOOL jump_word);
+
+static void update_filter_selection(struct console_search_t *cs);
 static void set_filter_title(struct console_search_t *cs);
 static void goto_result(struct console_search_t *cs);
 static void goto_next_result(struct console_search_t *cs, BOOL forward);
@@ -322,17 +336,60 @@ static void truncated_filter(struct console_search_t *cs, int old_length) {
     current->prev->next = NULL;
     while(current) {
       struct match_t *tmp = current;
-      COORD pos;
+      COORD tmp_pos;
       int index = new_length + current->position.Y * console_size.X + current->position.X;
       
-      pos.Y = index / console_size.X;
-      pos.X = index % console_size.X;
+      tmp_pos.Y = index / console_size.X;
+      tmp_pos.X = index % console_size.X;
       
       console_write_output_attribute(
         cs->output_handle, 
         cs->attributes + index, 
         old_length - new_length,
-        pos,
+        tmp_pos,
+        &written);
+      
+      current = current->next;
+      
+      free_memory(tmp);
+    }
+    
+    cs->current_result = NULL;
+  }
+  else
+    pos = cs->original_pos;
+  
+  find_all_at(cs, pos);
+}
+
+static void reset_filter(struct console_search_t *cs, int old_length) {
+  COORD pos;
+  
+  assert(cs != NULL);
+  
+  if(cs->current_result) {
+    struct match_t *current;
+    DWORD written;
+    COORD console_size = cs->console_size;
+    
+    pos = cs->current_result->position;
+    
+    assert(cs->current_result->prev != NULL);
+    assert(cs->current_result->prev->next == cs->current_result);
+    assert(cs->current_result->next != NULL);
+    assert(cs->current_result->next->prev == cs->current_result);
+    
+    current = cs->current_result;
+    current->prev->next = NULL;
+    while(current) {
+      struct match_t *tmp = current;
+      int index = current->position.Y * console_size.X + current->position.X;
+      
+      console_write_output_attribute(
+        cs->output_handle, 
+        cs->attributes + index, 
+        old_length,
+        current->position,
         &written);
       
       current = current->next;
@@ -404,56 +461,215 @@ static BOOL resize_filter_text(struct console_search_t *cs, int length) {
   return TRUE;
 }
 
-static BOOL add_filter_char(struct console_search_t *cs, wchar_t ch) {
+static BOOL raw_edit_filter_selection(struct console_search_t *cs, const wchar_t *ins, int ins_length) {
+  int old_length;
+  int new_length;
+  int start;
+  int end;
+  
   assert(cs != NULL);
   
-  if(!resize_filter_text(cs, cs->filter_length + 1)) {
-    return FALSE;
+  old_length = cs->filter_length;
+  assert(cs->filter_pos <= old_length);
+  assert(cs->filter_anchor <= old_length);
+  
+  if(ins)
+    assert(ins_length >= 0);
+  else
+    assert(ins_length == 0);
+  
+  start = MIN(cs->filter_anchor, cs->filter_pos);
+  end   = MAX(cs->filter_anchor, cs->filter_pos);
+  new_length = old_length - (end - start) + ins_length;
+  
+  if(new_length > old_length) {
+    if(!resize_filter_text(cs, new_length)) 
+      return FALSE;
+  }
+  else
+    cs->filter_length = new_length;
+  
+  memmove(
+    cs->filter_text + start + ins_length,
+    cs->filter_text + end,
+    old_length - end);
+  
+  if(ins) {
+    memmove(
+      cs->filter_text + start,
+      ins,
+      ins_length);
   }
   
-  cs->filter_text[cs->filter_length - 1] = ch;
+  cs->filter_anchor = start;
+  cs->filter_pos = start + ins_length;
+  return TRUE;
+}
+
+static BOOL add_filter_char(struct console_search_t *cs, wchar_t ch) {
+  int old_length;
+  BOOL append_only;
   
-  set_filter_title(cs);
+  assert(cs != NULL);
   
-  if(cs->current_result) {
-    extended_filter(cs, cs->filter_length - 1);
+  old_length = cs->filter_length;
+  assert(cs->filter_pos <= old_length);
+  
+  append_only = cs->filter_pos == old_length && cs->filter_anchor == old_length;
+  if(!raw_edit_filter_selection(cs, &ch, 1))
+    return FALSE;
+  
+  cs->filter_anchor = cs->filter_pos;
+  
+  if(cs->current_result && append_only) {
+    extended_filter(cs, old_length);
   }
   else {
-    find_all_at(cs, cs->original_pos);
+    reset_filter(cs, old_length);
   }
   
-  goto_result(cs);
+  update_filter_selection(cs);
   
   return TRUE;
 }
 
-static BOOL remove_filter_char(struct console_search_t *cs) {
+static BOOL remove_filter_selection(struct console_search_t *cs) {
+  int old_length;
+  
   assert(cs != NULL);
   
-  if(cs->filter_length == 0)
+  old_length = cs->filter_length;
+  assert(cs->filter_pos >= 0);
+  assert(cs->filter_pos <= old_length);
+  assert(cs->filter_anchor >= 0);
+  assert(cs->filter_anchor <= old_length);
+  
+  if(cs->filter_pos == cs->filter_anchor)
     return FALSE;
   
-  if(!resize_filter_text(cs, cs->filter_length - 1)) {
+  if(!raw_edit_filter_selection(cs, NULL, 0))
     return FALSE;
+  
+  if(cs->filter_pos == cs->filter_length) {
+    truncated_filter(cs, old_length);
+  }
+  else {
+    reset_filter(cs, old_length);
   }
   
-  set_filter_title(cs);
-  truncated_filter(cs, cs->filter_length + 1);
-  goto_result(cs);
+  update_filter_selection(cs);
   
   return TRUE;
+}
+
+static wchar_t *append(wchar_t *dst, const wchar_t *dst_end, const wchar_t *src, const wchar_t *optional_src_end) {
+  assert(dst != NULL);
+  assert(dst_end != NULL);
+  assert(src != NULL);
+  
+  while(dst != dst_end && *src && src != optional_src_end)
+    *dst++ = *src++;
+  
+  return dst;
+}
+
+
+static void move_filter_selection_left(struct console_search_t *cs, BOOL fix_anchor, BOOL jump_word) {
+  int new_pos;
+
+  assert(cs != NULL);
+  if(!cs->filter_text)
+    return;
+  
+  new_pos = cs->filter_pos;
+  if (new_pos > 0)
+    new_pos--;
+    
+  if(jump_word)
+    new_pos = console_get_word_start(cs->filter_text, cs->filter_length, new_pos);
+    
+  if(fix_anchor) {
+    cs->filter_pos = new_pos;
+  }
+  else {
+    if(cs->filter_pos < cs->filter_anchor) {
+      cs->filter_anchor = cs->filter_pos;
+    }
+    else if(cs->filter_anchor < cs->filter_pos) {
+      cs->filter_pos = cs->filter_anchor;
+    }
+    else {
+      cs->filter_pos = cs->filter_anchor = new_pos;
+    }
+  }
+}
+
+static void move_filter_selection_right(struct console_search_t *cs, BOOL fix_anchor, BOOL jump_word) {
+  int new_pos;
+  
+  assert(cs != NULL);
+    
+  new_pos = cs->filter_pos;
+  if(jump_word)
+    new_pos = console_get_word_end(cs->filter_text, cs->filter_length, new_pos);
+  else if(new_pos < cs->filter_length)
+    new_pos++;
+    
+  if(fix_anchor) {
+    cs->filter_pos = new_pos;
+  }
+  else {
+    if(cs->filter_pos > cs->filter_anchor) {
+      cs->filter_anchor = cs->filter_pos;
+    }
+    else if(cs->filter_anchor > cs->filter_pos) {
+      cs->filter_pos = cs->filter_anchor;
+    }
+    else {
+      cs->filter_pos = cs->filter_anchor = new_pos;
+    }
+  }
+}
+
+
+static void update_filter_selection(struct console_search_t *cs) {
+  
+  assert(cs != NULL);
+  
+  set_filter_title(cs);
+  goto_result(cs);
 }
 
 static void set_filter_title(struct console_search_t *cs) {
   wchar_t text[MAX_PATH];
+  wchar_t *s = text;
+  wchar_t *end = text + ARRAYSIZE(text) - 1;
+  
+  assert(cs != NULL);
   
   if(!cs->oritinal_title)
     return;
   
-  if(cs->filter_text)
-    StringCbPrintfW(text, sizeof(text), L"Find \x201C%s\x201D", cs->filter_text);
-  else
-    StringCbCopyW(text, sizeof(text), L"Find \x201C\x201D");
+  s = append(s, end, L"Find ", NULL);
+  if(cs->filter_text) {
+    int sel_start = MIN(cs->filter_pos, cs->filter_anchor);
+    int sel_end   = MAX(cs->filter_pos, cs->filter_anchor);
+    
+    s = append(s, end, cs->filter_text, cs->filter_text + sel_start);
+    if(sel_start == sel_end) {
+      s = append(s, end, L"|", NULL);
+    }
+    else {
+      s = append(s, end, L"[", NULL);
+      
+      s = append(s, end, cs->filter_text + sel_start, cs->filter_text + sel_end);
+      
+      s = append(s, end, L"]", NULL);
+    }
+    
+    s = append(s, end, cs->filter_text + sel_end, cs->filter_text + cs->filter_length);
+  }
+  *s = L'\0';
   
   SetConsoleTitleW(text);
 }
@@ -462,7 +678,16 @@ static void goto_result(struct console_search_t *cs) {
   assert(cs != NULL);
   
   if(cs->current_result) {
-    SetConsoleCursorPosition(cs->output_handle, cs->current_result->position);
+    COORD pos = cs->current_result->position;
+    
+//    int index = MIN(cs->filter_pos, cs->filter_anchor);
+//    if(index > 0) {
+//      index += pos.Y * cs->console_size.X + pos.X;
+//      pos.Y = index / cs->console_size.X;
+//      pos.X = index % cs->console_size.X;
+//    }
+    
+    SetConsoleCursorPosition(cs->output_handle, pos);
   }
 }
 
@@ -496,6 +721,8 @@ static void goto_next_result(struct console_search_t *cs, BOOL forward) {
     console_alert(cs->output_handle);
   }
 }
+
+
 
 static BOOL start_search_mode(struct console_search_t *cs) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -576,8 +803,55 @@ static BOOL search_mode_handle_key_event(struct console_search_t *cs, KEY_EVENT_
         return TRUE;
       
       case VK_BACK:
-        remove_filter_char(cs);
+        if(cs->filter_anchor == cs->filter_pos) {
+          move_filter_selection_left(
+            cs,
+            TRUE,
+            er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+        }
+        if(!remove_filter_selection(cs)) {
+          console_alert(cs->output_handle);
+        }
         return TRUE;
+      
+      case VK_DELETE:
+        if(cs->filter_anchor == cs->filter_pos) {
+          move_filter_selection_right(
+            cs,
+            TRUE,
+            er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+        }
+        if(!remove_filter_selection(cs)) {
+          console_alert(cs->output_handle);
+        }
+        return TRUE;
+      
+      case VK_LEFT:
+        move_filter_selection_left(
+          cs,
+          er->dwControlKeyState & SHIFT_PRESSED,
+          er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+        update_filter_selection(cs);
+        return TRUE;
+      
+      case VK_RIGHT:
+        move_filter_selection_right(
+          cs,
+          er->dwControlKeyState & SHIFT_PRESSED,
+          er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED));
+        update_filter_selection(cs);
+        return TRUE;
+      
+      case 'A': // Ctrl+A
+        if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+          if(cs->filter_text) {
+            cs->filter_anchor = 0;
+            cs->filter_pos = cs->filter_length;
+            update_filter_selection(cs);
+            return TRUE;
+          }
+        }
+        break;
         
       case 'F': // Ctrl+F
         if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
@@ -772,6 +1046,7 @@ BOOL console_handle_search_mode(HANDLE hConsoleInput, HANDLE hConsoleOutput, INP
     
     if(resize_filter_text(cs, length)) {
       memcpy(cs->filter_text, filter, length * sizeof(wchar_t));
+      cs->filter_pos = length;
     }
     
     set_filter_title(cs);

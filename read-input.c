@@ -1039,9 +1039,9 @@ static void move_right(struct console_input_t *con, BOOL fix_anchor, BOOL jump_w
     
   new_pos = con->input_pos;
   if(jump_word)
-    new_pos = console_get_word_end(con->input_text, con->input_length, con->input_pos);
-  else
-    new_pos = con->input_pos + 1;
+    new_pos = console_get_word_end(con->input_text, con->input_length, new_pos);
+  else if(new_pos < con->input_length)
+    new_pos++;
     
   if(fix_anchor) {
     reselect_input(con, new_pos, con->input_anchor);
