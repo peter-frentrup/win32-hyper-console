@@ -4,6 +4,7 @@
 #include "memory-util.h"
 #include "hyperlink-output.h"
 #include "debug.h"
+#include "text-util.h"
 
 #include <assert.h>
 #include <io.h>
@@ -551,6 +552,183 @@ static void list_directory(void) {
   printf("%16u Directories\n", num_directories);
 }
 
+struct show_tree_t {
+  wchar_t indent_buffer[100];
+  wchar_t *indent_end;
+  
+  wchar_t path[MAX_PATH];
+  wchar_t *path_end;
+  
+  const wchar_t *indent_more;
+  const wchar_t *indent_more_sub;
+  const wchar_t *indent_last;
+  const wchar_t *indent_last_sub;
+};
+
+static BOOL find_next_directory(HANDLE *hFind, WIN32_FIND_DATAW *ffd) {
+  assert(hFind != NULL);
+  assert(ffd != NULL);
+  
+  if(*hFind == INVALID_HANDLE_VALUE)
+    return FALSE;
+  
+  while(FindNextFileW(*hFind, ffd)) {
+    if(InterlockedOr(&interrupted, FALSE)) {
+      FindClose(*hFind);
+      break;
+    }
+    
+    if(ffd->dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)
+      continue;
+    
+    if(ffd->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+      return TRUE;
+  }
+  
+  *hFind = INVALID_HANDLE_VALUE;
+  ffd->cFileName[0] = L'\0';
+  
+  return FALSE;
+}
+
+static void show_directory_tree_helper(struct show_tree_t *context) {
+  WIN32_FIND_DATAW ffd;
+  wchar_t *indent_start;
+  wchar_t *indent_buffer_end;
+  
+  wchar_t *s;
+  wchar_t *path_end;
+  wchar_t *path_buffer_end;
+  
+  HANDLE hFind = INVALID_HANDLE_VALUE;
+  
+  assert(context != NULL);
+  
+  indent_start      = context->indent_end;
+  indent_buffer_end = context->indent_buffer + ARRAYSIZE(context->indent_buffer) - 1;
+  
+  path_end        = context->path_end;
+  path_buffer_end = context->path + ARRAYSIZE(context->indent_buffer) - 1;
+  
+  assert(path_end >= context->path);
+  assert(path_end < context->path + ARRAYSIZE(context->path));
+  assert(indent_start >= context->indent_buffer);
+  assert(indent_start <= indent_buffer_end);
+  
+  if(InterlockedOr(&interrupted, FALSE))
+    return;
+  
+  s = append_text(path_end, path_buffer_end, L"\\*", NULL);
+  if(s == path_buffer_end)
+    return;
+  
+  *s = L'\0';
+  hFind = FindFirstFileW(context->path, &ffd);
+  if(hFind == INVALID_HANDLE_VALUE) {
+    debug_printf(L"Error %d in FindFirstFileW\n", (int)GetLastError());
+    return;
+  }
+  
+  if((ffd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) ||
+    !(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) 
+  {
+    find_next_directory(&hFind, &ffd);
+  }
+  
+  if(wcscmp(ffd.cFileName, L".") == 0)
+    find_next_directory(&hFind, &ffd);
+    
+  if(wcscmp(ffd.cFileName, L"..") == 0)
+    find_next_directory(&hFind, &ffd);
+  
+  while(hFind != INVALID_HANDLE_VALUE) {
+    WIN32_FIND_DATAW dir_ffd = ffd;
+    BOOL have_next;
+    wchar_t *s;
+    
+    s = append_text(path_end, path_buffer_end, L"\\", NULL);
+    s = append_text(s, path_buffer_end, dir_ffd.cFileName, NULL);
+    *s = L'\0';
+    context->path_end = s;
+    
+    have_next = find_next_directory(&hFind, &ffd);
+    if(have_next) {
+      s = append_text(indent_start, indent_buffer_end, context->indent_more, NULL);
+      *s = L'\0';
+    }
+    else {
+      if(InterlockedOr(&interrupted, FALSE)) {
+        FindClose(hFind);
+        hFind = INVALID_HANDLE_VALUE;
+        break;
+      }
+    
+      s = append_text(indent_start, indent_buffer_end, context->indent_last, NULL);
+      *s = L'\0';
+    }
+    
+    write_unicode(context->indent_buffer);
+    
+    write_file_link(context->path, NULL, dir_ffd.cFileName, NULL, TRUE);
+    
+    if(dir_ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+      print_reparse_point_info(context->path, dir_ffd.dwReserved0, TRUE);
+      
+      printf("\n");
+    }
+    else {
+      printf("\n");
+      
+      if(have_next) {
+        s = append_text(indent_start, indent_buffer_end, context->indent_more_sub, NULL);
+        *s = L'\0';
+      }
+      else {
+        s = append_text(indent_start, indent_buffer_end, context->indent_last_sub, NULL);
+        *s = L'\0';
+      }
+      
+      context->indent_end = s;
+      
+      if(context->path_end < path_buffer_end) {
+        show_directory_tree_helper(context);
+      }
+    }
+  }
+}
+
+static void show_directory_tree(void) {
+  struct show_tree_t context[1];
+  DWORD length;
+  
+  memset(context, 0, sizeof(context));
+  
+  //context->indent_more     = L"+---";
+  //context->indent_more_sub = L"|   ";
+  //context->indent_last     = L"\\---";
+  //context->indent_last_sub = L"    ";
+  
+  context->indent_more     = L"\x251C\x2500\x2500\x2500";
+  context->indent_more_sub = L"\x2502   ";
+  context->indent_last     = L"\x2514\x2500\x2500\x2500";
+  context->indent_last_sub = L"    ";
+  
+  length = GetCurrentDirectoryW(ARRAYSIZE(context->path) - 1, context->path);
+  
+  printf("\n");
+  write_path_links(context->path, 0);
+  printf("\n");
+  
+  if(length > 0 && context->path[length-1] == L'\\')
+    --length;
+    
+  
+  context->indent_end = context->indent_buffer;
+  context->path_end = context->path + length;
+  
+  show_directory_tree_helper(context);
+}
+
 static void list_drives(void) {
   wchar_t drive[4] = L"A:\\";
   wchar_t volume_name[MAX_PATH];
@@ -839,6 +1017,9 @@ static void show_help(void) {
   write_simple_link(L"single-line input", L"single", L"single");
   printf("\t Switch to single-line input mode (default).\n");
   
+  write_simple_link(L"show directory tree", L"tree", L"tree");
+  printf("\t Show the current directory tree.\n");
+  
   printf("\nYou can use keyboard shortcuts Ctrl+C, Ctrl+X, Ctrl+V to access the clipboard.\n");
 }
 
@@ -919,6 +1100,11 @@ int main() {
     
     if(wcscmp(str, L"drives") == 0) {
       list_drives();
+      continue;
+    }
+    
+    if(wcscmp(str, L"tree") == 0) {
+      show_directory_tree();
       continue;
     }
     
