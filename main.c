@@ -132,35 +132,35 @@ static BOOL run_command_needs_quotes(const wchar_t *filename) {
 }
 
 static void write_file_link(
-  const wchar_t *filename, 
-  const wchar_t *optional_owning_directory, 
-  const wchar_t *optional_text,
-  const wchar_t *optional_args, 
-  BOOL is_directory
+    const wchar_t *filename,
+    const wchar_t *optional_owning_directory,
+    const wchar_t *optional_text,
+    const wchar_t *optional_args,
+    BOOL is_directory
 ) {
   wchar_t cmd[2 * MAX_PATH + 20];
   
   assert(filename != NULL);
   if(optional_owning_directory && *optional_owning_directory == L'\0')
     optional_owning_directory = NULL;
-  
+    
   if(is_directory) {
     const wchar_t *final_baskslash;
     
     const wchar_t *end = filename;
     while(*end)
       ++end;
-    
+      
     if(end[-1] == L'\\')
       final_baskslash = L"";
     else
       final_baskslash = L"\\";
-    
+      
     if(optional_owning_directory)
       StringCbPrintfW(cmd, sizeof(cmd), L"cd+dir %s\\%s%s", optional_owning_directory, filename, final_baskslash);
     else
       StringCbPrintfW(cmd, sizeof(cmd), L"cd+dir %s%s", filename, final_baskslash);
-    
+      
     if(!optional_text)
       optional_text = cmd + 7;
       
@@ -173,7 +173,7 @@ static void write_file_link(
     need_quote = run_command_needs_quotes(filename);
     if(!need_quote && optional_owning_directory)
       need_quote = run_command_needs_quotes(optional_owning_directory);
-    
+      
     quote = need_quote ? L"\"" : L"";
     
     StringCbPrintfW(cmd, sizeof(cmd), L"run %s%s%s%s%s%s%s",
@@ -202,7 +202,7 @@ static void write_file_link(
       StringCbPrintfW(cmd, sizeof(cmd), L"open %s\\%s", optional_owning_directory, filename);
     else
       StringCbPrintfW(cmd, sizeof(cmd), L"open %s", filename);
-    
+      
     if(!optional_text)
       optional_text = cmd + 5;
       
@@ -218,8 +218,6 @@ static void write_file_link(
 }
 
 static void write_path_links(wchar_t *path, int start) {
-  wchar_t link[MAX_PATH + 20];
-  
   while(path[start]) {
     DWORD next = start;
     wchar_t ch;
@@ -240,8 +238,6 @@ static void write_path_links(wchar_t *path, int start) {
     path[next] = L'\0';
     
     write_file_link(path, NULL, path + start, NULL, TRUE);
-    //StringCbPrintfW(link, sizeof(link), L"cd+dir %s\\", path);
-    //write_simple_link(link, link, path + start);
     
     path[next] = ch;
     start = next;
@@ -412,9 +408,9 @@ static void print_shortcut_info(const wchar_t *file) {
           
           *args = L'\0';
           hr = IShellLinkW_GetArguments(sl, args, ARRAYSIZE(args));
-          if(FAILED(hr)) 
+          if(FAILED(hr))
             *args = L'\0';
-          
+            
           printf(" [");
           write_file_link(path, NULL, NULL, args, is_directory);
           printf("]");
@@ -537,6 +533,32 @@ static void list_directory(void) {
   
   printf("%16u File(s), %16" PRIu64 " Bytes\n", num_files, file_sizes);
   printf("%16u Directories\n", num_directories);
+}
+
+static void list_drives(void) {
+  wchar_t drive[4] = L"A:\\";
+  wchar_t volume_name[MAX_PATH];
+  wchar_t text[MAX_PATH];
+  int i;
+  DWORD drives_available = GetLogicalDrives();
+  
+  printf("\n");
+  
+  for(i = 0;i < 32;++i) {
+    if(drives_available & (1 << i)) {
+      drive[0] = L'A' + i;
+      
+      if(GetVolumeInformationW(drive, volume_name, ARRAYSIZE(volume_name), NULL, NULL, NULL, NULL, 0)) {
+        
+        StringCbPrintfW(text, sizeof(text), L"%s (%c:)", volume_name, L'A' + i);
+        
+        printf("  ");
+        write_file_link(drive, NULL, text, NULL, TRUE);
+        printf("\n");
+      }
+      
+    }
+  }
 }
 
 static BOOL first_word_equals(const wchar_t *str, const wchar_t *word) {
@@ -777,6 +799,9 @@ static void show_help(void) {
   write_simple_link(L"list current directory", L"dir", L"dir");
   printf("\t List the content of the current directory.\n");
   
+  write_simple_link(L"list drives", L"drives", L"drives");
+  printf("\t List all available drives.\n");
+  
   write_simple_link(L"command help", L"help", L"help");
   printf("\t Display this help.\n");
   
@@ -873,6 +898,11 @@ int main() {
     if(first_word_equals(str, L"cd+dir")) {
       change_directory(str + 6);
       list_directory();
+      continue;
+    }
+    
+    if(wcscmp(str, L"drives") == 0) {
+      list_drives();
       continue;
     }
     
