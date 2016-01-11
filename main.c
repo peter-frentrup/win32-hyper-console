@@ -281,7 +281,10 @@ static void change_directory(const wchar_t *command_rest) {
   printf("\\\n");
 }
 
-typedef struct _REPARSE_DATA_BUFFER {
+/* This is REPARSE_DATA_BUFFER. That structure is not included in Windows SDK, 
+   but some Mingw headers and the Windows Driver SDK have it.
+ */
+struct reparse_data_buffer_t {
   ULONG  ReparseTag;
   USHORT ReparseDataLength;
   USHORT Reserved;
@@ -305,11 +308,11 @@ typedef struct _REPARSE_DATA_BUFFER {
       UCHAR DataBuffer[1];
     } GenericReparseBuffer;
   };
-} REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
+};
 
 static void print_reparse_point_info(const wchar_t *file, DWORD reparse_tag, BOOL is_directory) {
   struct {
-    REPARSE_DATA_BUFFER header;
+    struct reparse_data_buffer_t header;
     wchar_t _rest[MAX_PATH - 1];
   } data;
   BOOL success;
