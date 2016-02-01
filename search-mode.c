@@ -891,6 +891,17 @@ static BOOL search_mode_handle_key_event(struct console_search_t *cs, KEY_EVENT_
         
       case 'F': // Ctrl+F
         if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
+          if(cs->filter_text) {
+            int old_anchor = cs->filter_anchor;
+            int old_pos = cs->filter_pos;
+            
+            cs->filter_anchor = 0;
+            cs->filter_pos = cs->filter_length;
+            update_filter_selection(cs);
+            
+            if(old_pos != cs->filter_pos || old_anchor != cs->filter_anchor)
+              return TRUE;
+          }
           goto_next_result(cs, er->dwControlKeyState & SHIFT_PRESSED);
           return TRUE;
         }
