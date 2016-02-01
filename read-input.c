@@ -249,13 +249,13 @@ static BOOL read_prompt(struct console_input_t *con, int length) {
     return FALSE;
   }
   
-  bufsize.X = con->prompt_size;
+  bufsize.X = (SHORT)con->prompt_size;
   bufsize.Y = 1;
   bufpos.X = 0;
   bufpos.Y = 0;
   region.Left = 0;
-  region.Top = con->input_line_coord_y;
-  region.Right = con->prompt_size;
+  region.Top = (SHORT)con->input_line_coord_y;
+  region.Right = (SHORT)con->prompt_size;
   region.Bottom = region.Top;
   if(!ReadConsoleOutputW(con->output_handle, con->prompt, bufsize, bufpos, &region)) {
     free_memory(con->prompt);
@@ -631,7 +631,7 @@ static BOOL scroll_screen_if_needed(struct console_input_t *con) {
     
     scroll_rect.Left = 0;
     scroll_rect.Right = con->console_size.X - 1;
-    scroll_rect.Top = scroll_lines;
+    scroll_rect.Top = (SHORT)scroll_lines;
     scroll_rect.Bottom = con->console_size.Y - 1;
     
     dst.X = 0;
@@ -678,7 +678,7 @@ static BOOL write_output_buffer_lines(struct console_input_t *con) {
   COORD bufsize;
   COORD bufpos;
   SMALL_RECT region;
-  int console_width;
+  SHORT console_width;
   int lines;
   
   assert(con != NULL);
@@ -725,7 +725,7 @@ static BOOL write_output_buffer_lines(struct console_input_t *con) {
   bufpos.X = 0;
   bufpos.Y = 0;
   region.Left = 0;
-  region.Top = con->input_line_coord_y;
+  region.Top = (SHORT)con->input_line_coord_y;
   region.Right = console_width - 1;
   region.Bottom = region.Top + lines - 1;
   
@@ -782,19 +782,19 @@ static BOOL update_output(struct console_input_t *con) {
 }
 
 static BOOL selection_equals(struct console_input_t *con, const wchar_t *str) {
-  int length;
-  int start;
-  int end;
+  size_t length;
+  size_t start;
+  size_t end;
   
   assert(con != NULL);
   assert(str != NULL);
   
   length = wcslen(str);
   
-  start = MIN(con->input_anchor, con->input_pos);
-  end   = MAX(con->input_anchor, con->input_pos);
+  start = (size_t)MIN(con->input_anchor, con->input_pos);
+  end   = (size_t)MAX(con->input_anchor, con->input_pos);
   
-  if(start + length == end) {
+  if(end - start == length) {
     return 0 == memcmp(con->input_text + start, str, length * sizeof(wchar_t));
   }
   
@@ -914,8 +914,8 @@ static BOOL insert_input_char(struct console_input_t *con, int pos, wchar_t ch) 
 static BOOL surround_selection(struct console_input_t *con, const wchar_t *left, const wchar_t *right) {
   int start;
   int end;
-  int left_length;
-  int right_length;
+  size_t left_length;
+  size_t right_length;
   
   assert(con != NULL);
   assert(left != NULL);
@@ -924,19 +924,22 @@ static BOOL surround_selection(struct console_input_t *con, const wchar_t *left,
   left_length  = wcslen(left);
   right_length = wcslen(right);
   
+  if(left_length > INT_MAX / 2 || right_length > INT_MAX / 2 || left_length + right_length > INT_MAX / 2)
+    return FALSE;
+  
   start = MIN(con->input_anchor, con->input_pos);
   end = MAX(con->input_anchor, con->input_pos);
   
-  if(!insert_input_text(con, end, right, right_length))
+  if(!insert_input_text(con, end, right, (int)right_length))
     return FALSE;
     
-  end+= right_length;
-  if(!insert_input_text(con, start, left, left_length)) {
+  end+= (int)right_length;
+  if(!insert_input_text(con, start, left, (int)left_length)) {
     delete_input_text(con, end, 1);
     return FALSE;
   }
   
-  end+= left_length;
+  end+= (int)left_length;
   reselect_input(con, end, start);
   return TRUE;
 }
@@ -1131,7 +1134,7 @@ static void change_console_size(struct console_input_t *con, int delta_columns) 
   
   if(!GetConsoleScreenBufferInfoEx(con->output_handle, &csbiex))
     return;
-    
+  
   rect = csbiex.srWindow;
   csbiex.dwSize.X += delta_columns;
   csbiex.srWindow.Left = 0;
@@ -1720,7 +1723,7 @@ static wchar_t *read_file(FILE *file, BOOL multiline_mode) {
   int str_len = 0;
   
   while(fgetws(buffer, ARRAYSIZE(buffer), file)) {
-    int len = wcslen(buffer);
+    int len = (int)wcslen(buffer);
     
     if(len <= 0)
       return str;

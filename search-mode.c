@@ -161,7 +161,7 @@ static struct match_t *find_all_within(struct console_search_t *cs, int start, i
           result = new_match->prev = new_match->next = new_match;
         }
         
-        new_match->position.Y = start / cs->console_size.X;
+        new_match->position.Y = (SHORT)(start / cs->console_size.X);
         new_match->position.X = start % cs->console_size.X;
       }
       
@@ -346,7 +346,7 @@ static void truncated_filter(struct console_search_t *cs, int old_length) {
       COORD tmp_pos;
       int index = new_length + current->position.Y * console_size.X + current->position.X;
       
-      tmp_pos.Y = index / console_size.X;
+      tmp_pos.Y = (SHORT)(index / console_size.X);
       tmp_pos.X = index % console_size.X;
       
       console_write_output_attribute(
@@ -680,7 +680,7 @@ static void goto_result(struct console_search_t *cs) {
     int index = MIN(cs->filter_pos, cs->filter_anchor);
     if(index > 0) {
       index += pos.Y * cs->console_size.X + pos.X;
-      pos.Y = index / cs->console_size.X;
+      pos.Y = (SHORT)(index / cs->console_size.X);
       pos.X = index % cs->console_size.X;
     }
   }
@@ -1137,7 +1137,7 @@ BOOL console_handle_search_mode(HANDLE hConsoleInput, HANDLE hConsoleOutput, INP
   cs->last_result_pos = csbi.dwCursorPosition;
   
   if(filter) {
-    int length = wcslen(filter);
+    int length = (int)wcslen(filter);
     
     start_search_mode(cs);
     

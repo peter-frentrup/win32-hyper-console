@@ -296,10 +296,12 @@ static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t
     return;
     
   if(title_length < 0) {
-    title_length = wcslen(title);
+    size_t ulen = wcslen(title);
     
-    if(title_length < 0)
+    if(ulen >= INT_MAX)
       return;
+    
+    title_length = (int)ulen;
   }
   
   link = hc->last_link;
@@ -332,10 +334,12 @@ static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wc
     return;
     
   if(text_length < 0) {
-    text_length = wcslen(text);
+    size_t ulen = wcslen(text);
     
-    if(text_length < 0)
+    if(ulen >= INT_MAX)
       return;
+    
+    text_length = (int)ulen;
   }
   
   link = hc->last_link;

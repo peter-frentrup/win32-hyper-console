@@ -416,7 +416,7 @@ void console_clean_lines(HANDLE hConsoleOutput, int num_lines) {
     
   for(pos.Y = 0; pos.Y < num_lines; pos.Y++) {
     DWORD num_read;
-    int x;
+    SHORT x;
     
     pos.X = 0;
     if(!ReadConsoleOutputCharacterW(hConsoleOutput, line_chars, csbi.dwSize.X, pos, &num_read)) {
@@ -456,8 +456,8 @@ BOOL console_scroll_wheel(HANDLE hConsoleOutput, const MOUSE_EVENT_RECORD *er) {
     
     memset(&csbi, 0, sizeof(csbi));
     if(GetConsoleScreenBufferInfo(hConsoleOutput, &csbi)) {
-      csbi.srWindow.Top -= scroll_lines;
-      csbi.srWindow.Bottom -= scroll_lines;
+      csbi.srWindow.Top -= (SHORT)scroll_lines;
+      csbi.srWindow.Bottom -= (SHORT)scroll_lines;
       
       if(csbi.srWindow.Top < 0) {
         csbi.srWindow.Bottom += (0 - csbi.srWindow.Top);
@@ -479,7 +479,7 @@ BOOL console_scroll_wheel(HANDLE hConsoleOutput, const MOUSE_EVENT_RECORD *er) {
 
 BOOL console_scroll_key(HANDLE hConsoleOutput, const KEY_EVENT_RECORD *er) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
-  int scoll_delta = 0;
+  SHORT scoll_delta = 0;
   
   assert(er != NULL);
   
@@ -588,7 +588,7 @@ static BOOL send_input(struct send_input_t *context, wchar_t ch) {
   context->input_records[context->counter].Event.KeyEvent.uChar.UnicodeChar = ch;
   context->input_records[context->counter].Event.KeyEvent.wRepeatCount = 1;
   context->input_records[context->counter].Event.KeyEvent.wVirtualKeyCode = LOBYTE(vk_mode);
-  context->input_records[context->counter].Event.KeyEvent.wVirtualScanCode = MapVirtualKeyW(LOBYTE(vk_mode), MAPVK_VK_TO_VSC);
+  context->input_records[context->counter].Event.KeyEvent.wVirtualScanCode = (WORD)MapVirtualKeyW(LOBYTE(vk_mode), MAPVK_VK_TO_VSC);
   context->counter++;
   
   context->input_records[context->counter] = context->input_records[context->counter - 1];

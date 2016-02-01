@@ -265,7 +265,7 @@ static int apply_match_at(
     
     visible_matched_lines += num_vis;
     visible += num_vis * visible_size.X;
-    visible_size.Y -= num_vis;
+    visible_size.Y -= (SHORT)num_vis;
     ++orig_start;
   }
   
@@ -427,7 +427,7 @@ void console_scrollback_update(struct console_scrollback_t *cs, int known_visibl
     known_visible_lines = csbi.dwSize.Y;
     
   visible_size.X = csbi.dwSize.X;
-  visible_size.Y = known_visible_lines;
+  visible_size.Y = (SHORT)known_visible_lines;
   
   if(visible_size.X <= 0 || visible_size.Y <= 0) {
     clear_line_numbers_array(&cs->visible_line_numbers);
@@ -513,7 +513,7 @@ BOOL console_scollback_global_to_local(struct console_scrollback_t *cs, int line
   
   if(cs == NULL)
     return FALSE;
-    
+  
   vis_y_count = cs->visible_line_numbers.count;
   
   if(line < cs->past_lines_count)
@@ -528,8 +528,8 @@ BOOL console_scollback_global_to_local(struct console_scrollback_t *cs, int line
     next_global_line = cs->past_lines_count;
     
   if(line == next_global_line) {
-    local->Y = vis_y_count;
-    local->X = column;
+    local->Y = (SHORT)vis_y_count;
+    local->X = (SHORT)MIN(column, SHRT_MAX);
     return TRUE;
   }
   
@@ -545,8 +545,8 @@ BOOL console_scollback_global_to_local(struct console_scrollback_t *cs, int line
       }
       
       if(column < break_column) {
-        local->Y = vis_y;
-        local->X = column - coords[vis_y].column;
+        local->Y = (SHORT)vis_y;
+        local->X = (SHORT)(column - coords[vis_y].column);
         return TRUE;
       }
     }

@@ -313,7 +313,7 @@ static wchar_t *get_selection_lines(struct console_mark_t *cm, int *total_length
     
   *s = L'\0';
   
-  *total_length = s - str;
+  *total_length = (int)(s - str);
   return str;
 }
 
@@ -379,7 +379,7 @@ static wchar_t *get_selection_block_lines(struct console_mark_t *cm, int *total_
   }
   
   *s = L'\0';
-  *total_length = s - str;
+  *total_length = (int)(s - str);
   return str;
 }
 

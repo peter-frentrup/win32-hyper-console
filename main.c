@@ -94,7 +94,7 @@ static BOOL has_any_extension(const wchar_t *filename, const wchar_t *extensions
     return FALSE;
     
   memcpy(file_ext_upper, file_ext, (end - file_ext) * sizeof(wchar_t));
-  CharUpperBuffW(file_ext_upper, end - file_ext);
+  CharUpperBuffW(file_ext_upper, (DWORD)(end - file_ext));
   
   while(*extensions) {
     const wchar_t *next = extensions;
@@ -104,7 +104,7 @@ static BOOL has_any_extension(const wchar_t *filename, const wchar_t *extensions
       
     if(next - extensions == end - file_ext) {
       memcpy(other_ext_upper, extensions, (next - extensions) * sizeof(wchar_t));
-      CharUpperBuffW(other_ext_upper, next - extensions);
+      CharUpperBuffW(other_ext_upper, (DWORD)(next - extensions));
       
       if(0 == wmemcmp(file_ext_upper, other_ext_upper, end - file_ext))
         return TRUE;
@@ -944,7 +944,7 @@ static void change_color(const wchar_t *arg) {
 static void open_document(const wchar_t *arg) {
 
   const wchar_t *filename;
-  unsigned success_flag;
+  uintptr_t success_flag;
   
   while(*arg == L' ')
     ++arg;
