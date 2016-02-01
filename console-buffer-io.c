@@ -60,8 +60,8 @@ BOOL console_read_output_character(
     nLength -= chars_read;
     x = dwReadCoord.X + chars_read;
     
-    dwReadCoord.Y += x / csbi.dwSize.X;
-    dwReadCoord.X = x % csbi.dwSize.X;
+    dwReadCoord.Y += (SHORT)(x / csbi.dwSize.X);
+    dwReadCoord.X =          x % csbi.dwSize.X;
     
     if(dwReadCoord.Y >= csbi.dwSize.Y)
       return FALSE;
@@ -119,8 +119,8 @@ static BOOL touch_output_attribute(
     nLength -= attrs_touched;
     x = dwReadCoord.X + attrs_touched;
     
-    dwReadCoord.Y += x / csbi.dwSize.X;
-    dwReadCoord.X = x % csbi.dwSize.X;
+    dwReadCoord.Y += (SHORT)(x / csbi.dwSize.X);
+    dwReadCoord.X =          x % csbi.dwSize.X;
     
     if(dwReadCoord.Y >= csbi.dwSize.Y)
       return FALSE;
@@ -203,8 +203,8 @@ static COORD console_output_invert_colors_helper(
   
   x = start.X + attrs_read;
   
-  start.Y += x / console_size.X;
-  start.X = x % console_size.X;
+  start.Y += (SHORT)(x / console_size.X);
+  start.X =          x % console_size.X;
   
   return start;
 }
@@ -542,7 +542,6 @@ static BOOL flush_input(struct send_input_t *context) {
   
   assert(context != NULL);
   
-  assert(context->counter >= 0);
   assert(context->counter <= sizeof(context->input_records) / sizeof(INPUT_RECORD));
   
   if(!WriteConsoleInputW(context->input_handle, context->input_records, context->counter, &written)) {
@@ -559,7 +558,6 @@ static BOOL send_input(struct send_input_t *context, wchar_t ch) {
   SHORT vk_mode;
   
   assert(context != NULL);
-  assert(context->counter >= 0);
   
   if(context->counter + 2 > sizeof(context->input_records) / sizeof(INPUT_RECORD)) {
     if(!flush_input(context))
@@ -702,11 +700,11 @@ BOOL console_get_screen_word_start_end(HANDLE hConsoleOutput, COORD pos, COORD *
         --e;
     }
     
-    end->Y = start->Y + e / csbi.dwSize.X;
-    end->X = start->X + e % csbi.dwSize.X;
+    end->Y = start->Y + (SHORT)(e / csbi.dwSize.X);
+    end->X = start->X +         e % csbi.dwSize.X;
     
-    start->Y += s / csbi.dwSize.X;
-    start->X += s % csbi.dwSize.X;
+    start->Y += (SHORT)(s / csbi.dwSize.X);
+    start->X +=         s % csbi.dwSize.X;
     
     free_memory(screen);
     return TRUE;
