@@ -1125,44 +1125,6 @@ static void copy_to_clipboard(struct console_input_t *con) {
   CloseClipboard();
 }
 
-static void change_console_size(struct console_input_t *con, int delta_columns) {
-  CONSOLE_SCREEN_BUFFER_INFOEX csbiex;
-  SMALL_RECT rect;
-  
-  memset(&csbiex, 0, sizeof(csbiex));
-  csbiex.cbSize = sizeof(csbiex);
-  
-  if(!GetConsoleScreenBufferInfoEx(con->output_handle, &csbiex))
-    return;
-  
-  rect = csbiex.srWindow;
-  csbiex.dwSize.X += delta_columns;
-  csbiex.srWindow.Left = 0;
-  csbiex.srWindow.Right = csbiex.dwSize.X;
-  
-  if(!SetConsoleScreenBufferInfoEx(con->output_handle, &csbiex)) {
-    debug_printf(L"SetConsoleScreenBufferInfoEx failed: %d", (unsigned)GetLastError());
-  }
-  
-  // I have no idea why this is necessary, but otherwise, the console keeps shrinking.
-  csbiex.srWindow.Bottom = rect.Bottom + 1;
-  if(!SetConsoleScreenBufferInfoEx(con->output_handle, &csbiex)) {
-    debug_printf(L"SetConsoleScreenBufferInfoEx failed: %d", (unsigned)GetLastError());
-  }
-  
-  
-//  rect.Left = 0;
-//  rect.Top = 0;
-//  rect.Bottom = csbiex.dwSize.Y;
-//  rect.Right = csbiex.dwSize.X;
-//  if(!SetConsoleWindowInfo(con->output_handle, FALSE, &rect)) {
-//    wchar_t buffer[100];
-//    StringCbPrintfW(buffer, sizeof(buffer), L"SetConsoleWindowInfo failed: %d", (unsigned)GetLastError() );
-//
-//    OutputDebugStringW(buffer);
-//  }
-}
-
 static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er) {
   assert(con != NULL);
   
@@ -1306,24 +1268,6 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
       insert_input_char(con, con->input_pos, L'\t');
       update_output(con);
       return;
-      
-    case VK_OEM_MINUS:
-      if( (er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) &&
-          (er->dwControlKeyState & SHIFT_PRESSED) )
-      {
-        change_console_size(con, -1);
-        return;
-      }
-      break;
-      
-    case VK_OEM_PLUS:
-      if( (er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) &&
-          (er->dwControlKeyState & SHIFT_PRESSED) )
-      {
-        change_console_size(con, +1);
-        return;
-      }
-      break;
   }
   
   if(can_auto_surround(con)) {
