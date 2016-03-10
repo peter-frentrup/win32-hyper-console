@@ -3,6 +3,26 @@
 
 #include <windows.h>
 
+enum{
+  READ_INPUT_FLAG_MULTILINE = 1
+};
+
+/** Options for read_input()
+ */
+struct read_input_settings_t {
+  /** Size of the structure, i.e. sizeof(struct read_input_settings_t)
+   */
+  size_t size;
+  
+  /** Zero or more of the READ_INPUT_FLAG_XXX constants.
+   */
+  int flags; 
+  
+  /** The default input or NULL.
+   */
+  const wchar_t *default_input;
+};
+
 /** Test whether the current thread is calling read_input() at the moment.
  */
 BOOL is_handling_input(void);
@@ -18,9 +38,10 @@ BOOL stop_current_input(BOOL do_abort, const wchar_t *opt_replace_input);
 
 /** Read a line of input
   
+  \param settings Optional customizations of the input procedure.
   \return The text entered by the user without trailing newline, or NULL on error. 
           The result must be freed with free_memory().
  */
-wchar_t *read_input(BOOL multiline_mode, const wchar_t *default_input);
+wchar_t *read_input(struct read_input_settings_t *settings);
 
 #endif // __CONSOLE__READ_INPUT_H__

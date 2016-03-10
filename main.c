@@ -1033,8 +1033,12 @@ static void handle_sigint(int sig) {
 }
 
 int main() {
-  BOOL multiline_mode = FALSE;
   wchar_t *str = NULL;
+  struct read_input_settings_t settings;
+  
+  memset(&settings, 0, sizeof(settings));
+  settings.size = sizeof(settings);
+  settings.default_input = L"help";
   
   signal(SIGINT, handle_sigint);
   
@@ -1064,19 +1068,19 @@ int main() {
     printf(">");
     
     free_memory(str);
-    str = read_input(multiline_mode, L"help");
+    str = read_input(&settings);
     if(!str)
       continue;
       
     if(wcscmp(str, L"multi") == 0) {
       printf("Switching to multi-line mode.\n");
-      multiline_mode = TRUE;
+      settings.flags |= READ_INPUT_FLAG_MULTILINE;
       continue;
     }
     
     if(wcscmp(str, L"single") == 0) {
       printf("Switching to single-line mode.\n");
-      multiline_mode = FALSE;
+      settings.flags &= ~READ_INPUT_FLAG_MULTILINE;
       continue;
     }
     

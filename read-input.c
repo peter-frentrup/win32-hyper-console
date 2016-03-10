@@ -24,6 +24,11 @@
 #define MAX(A, B)  ((A) > (B) ? (A) : (B))
 
 
+#ifndef offsetof
+#  define offsetof(type, member) __builtin_offsetof(type, member)
+#endif
+
+
 struct console_input_t {
   HANDLE input_handle;
   HANDLE output_handle;
@@ -1696,20 +1701,32 @@ static wchar_t *read_file(FILE *file, BOOL multiline_mode) {
   return NULL;
 }
 
-wchar_t *read_input(BOOL multiline_mode, const wchar_t *default_input) {
+#define HAVE_SETTINGS(settings, name) ((settings) && (settings)->size >= offsetof(struct read_input_settings_t, name))
+
+wchar_t *read_input(struct read_input_settings_t *settings) {
   struct console_input_t con[1];
   struct console_input_t *old_con;
   
   if(!init_console(con)) {
+    BOOL multiline_mode = FALSE;
+  
+    if(HAVE_SETTINGS(settings, flags)) {
+      multiline_mode = (settings->flags & READ_INPUT_FLAG_MULTILINE) != 0;
+    }
+    
+    /* settings->default_input is ignored */
     fflush(stdout);
     return read_file(stdin, multiline_mode);
   }
   
-  con->multiline_mode = multiline_mode;
+  if(HAVE_SETTINGS(settings, flags)) {
+    con->multiline_mode = (settings->flags & READ_INPUT_FLAG_MULTILINE) != 0;
+  }
+  
   init_buffer(con);
   
-  if(default_input) {
-    insert_input_text(con, 0, default_input, -1);
+  if(HAVE_SETTINGS(settings, default_input) && settings->default_input) {
+    insert_input_text(con, 0, settings->default_input, -1);
     con->input_anchor = 0;
   }
   update_output(con);
