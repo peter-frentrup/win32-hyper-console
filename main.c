@@ -648,7 +648,6 @@ static void show_directory_tree_helper(struct show_tree_t *context) {
   while(hFind != INVALID_HANDLE_VALUE) {
     WIN32_FIND_DATAW dir_ffd = ffd;
     BOOL have_next;
-    wchar_t *s;
     
     s = append_text(path_end, path_buffer_end, L"\\", NULL);
     s = append_text(s, path_buffer_end, dir_ffd.cFileName, NULL);
@@ -744,7 +743,7 @@ static void list_drives(void) {
   
   for(i = 0;i < 32;++i) {
     if(drives_available & (1 << i)) {
-      drive[0] = L'A' + i;
+      drive[0] = (wchar_t)(L'A' + i);
       
       if(GetVolumeInformationW(drive, volume_name, ARRAYSIZE(volume_name), NULL, NULL, NULL, NULL, 0)) {
         
