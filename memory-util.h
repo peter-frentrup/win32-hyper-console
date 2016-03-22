@@ -19,7 +19,7 @@
   remain unchanged.
   Any new items are uninitialized, while old items are copied over from the old array.
   
-  The array @a *arr may be freed with free_malloc().
+  The array @a *arr may be freed with free_memory().
  */
 BOOL resize_array(void **arr, int *capacity, int item_size, int newsize);
 
