@@ -5,6 +5,7 @@
 
 BOOL resize_array(void **arr, int *capacity, int item_size, int newsize) {
   int newcap;
+  void *new_arr;
   
   assert(arr != NULL);
   assert(capacity != NULL);
@@ -22,12 +23,15 @@ BOOL resize_array(void **arr, int *capacity, int item_size, int newsize) {
   while(newcap < newsize)
     newcap *= 2;
     
-  *arr = realloc(*arr, newcap * item_size);
-  if(!*arr) {
-    *capacity = 0;
+  new_arr = realloc(*arr, newcap * item_size);
+  if(!new_arr) {
+    //free_memory(*arr);
+    //*arr = NULL;
+    //*capacity = 0;
     return FALSE;
   }
   
+  *arr = new_arr;
   *capacity = newcap;
   return TRUE;
 }
