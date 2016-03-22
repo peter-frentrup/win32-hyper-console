@@ -4,6 +4,7 @@
 
 #include <assert.h>
 
+
 // TODO: use  text_line_t  and  text_array_t  from scroll-counter.c
 struct history_line_t {
   int length;
@@ -21,9 +22,10 @@ struct console_history_t *console_history_new(int options) {
   struct console_history_t *hist;
   
   hist = allocate_memory(sizeof(struct console_history_t));
-  if(hist) {
-    memset(hist, 0, sizeof(struct console_history_t));
-  }
+  if(!hist)
+    return NULL;
+  
+  memset(hist, 0, sizeof(struct console_history_t));
   
   return hist;
 }
@@ -98,7 +100,7 @@ void console_history_add(struct console_history_t *hist, const wchar_t *text, in
   if(text_length == 0)
     return;
   
-  // Ignore duplicates. TODO: respect win32 console setting regarding this.
+  // Ignore duplicates. TODO: ignore old duplicates if GetConsoleHistoryInfo() says so.
   prev_text = console_history_get(hist, hist->count - 1, &prev_length);
   if( prev_length == text_length &&
       memcmp(prev_text, text, sizeof(wchar_t) * text_length) == 0)
