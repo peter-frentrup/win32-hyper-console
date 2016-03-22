@@ -76,6 +76,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="console-buffer-io.h" />
+		<Unit filename="console-history.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="console-history.h" />
 		<Unit filename="debug.c">
 			<Option compilerVar="CC" />
 		</Unit>

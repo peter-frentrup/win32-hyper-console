@@ -3,6 +3,8 @@
 
 #include <windows.h>
 
+struct console_history_t;
+
 enum{
   READ_INPUT_FLAG_MULTILINE = 1
 };
@@ -21,6 +23,10 @@ struct read_input_settings_t {
   /** The default input or NULL.
    */
   const wchar_t *default_input;
+  
+  /** A history buffer or NULL.
+   */
+  struct console_history_t *history;
 };
 
 /** Test whether the current thread is calling read_input() at the moment.

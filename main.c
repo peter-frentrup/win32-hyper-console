@@ -1,6 +1,7 @@
 #define COBJMACROS
 
 #include "read-input.h"
+#include "console-history.h"
 #include "memory-util.h"
 #include "hyperlink-output.h"
 #include "debug.h"
@@ -1039,6 +1040,7 @@ int main() {
   memset(&settings, 0, sizeof(settings));
   settings.size = sizeof(settings);
   settings.default_input = L"help";
+  settings.history = console_history_new(0);
   
   signal(SIGINT, handle_sigint);
   
@@ -1166,6 +1168,7 @@ int main() {
   }
   
   done_hyperlink_system();
+  console_history_free(settings.history);
   
   return 0;
 }

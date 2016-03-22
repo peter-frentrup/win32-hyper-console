@@ -1,6 +1,7 @@
 #define _WIN32_WINNT 0x0600
 
 #include "read-input.h"
+#include "console-history.h"
 #include "memory-util.h"
 #include "hyperlink-output.h"
 #include "console-buffer-io.h"
@@ -53,6 +54,9 @@ struct console_input_t {
   
   CHAR_INFO *prompt;
   int prompt_size;
+  
+  struct console_history_t *history;
+  int history_index;
   
   CHAR_INFO *output_buffer; // [output_size]
   int output_capacity;
@@ -1130,6 +1134,40 @@ static void copy_to_clipboard(struct console_input_t *con) {
   CloseClipboard();
 }
 
+static void navigate_history(struct console_input_t *con, int delta) {
+  const wchar_t *hist_text;
+  int hist_text_length;
+  
+  assert(con != NULL);
+  
+  hist_text = console_history_get(con->history, con->history_index + delta, &hist_text_length);
+  if(!hist_text) {
+    int count = console_history_count(con->history);
+    if(con->history_index + delta >= count) {
+      con->history_index = count;
+      
+      con->input_anchor = 0;
+      con->input_pos = con->input_length;
+      delete_selection_no_update(con);
+      update_output(con);
+    }
+    
+    return;
+  }
+  
+  con->history_index+= delta;
+  
+  con->input_anchor = 0;
+  con->input_pos = con->input_length;
+  delete_selection_no_update(con);
+  insert_input_text(con, 0, hist_text, hist_text_length);
+  if(delta > 0) {
+    con->input_anchor = 0;
+    con->input_pos = 0;
+  }
+  update_output(con);
+}
+
 static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er) {
   assert(con != NULL);
   
@@ -1198,12 +1236,30 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
     case VK_END:
       move_end(con, er->dwControlKeyState & SHIFT_PRESSED);
       return;
-    
+      
     case VK_UP:
+      if(!console_scroll_key(con->output_handle, er)) {
+        navigate_history(con, -1);
+      }
+      return;
+    
     case VK_DOWN:
+      if(!console_scroll_key(con->output_handle, er)) {
+        navigate_history(con, +1);
+      }
+      return;
+    
     case VK_PRIOR:
     case VK_NEXT:
       console_scroll_key(con->output_handle, er);
+      return;
+      
+    case VK_ESCAPE:
+      con->input_anchor = 0;
+      con->input_pos = con->input_length;
+      con->history_index = console_history_count(con->history);
+      delete_selection_no_update(con);
+      update_output(con);
       return;
       
     case 'A': // Ctrl+A
@@ -1723,6 +1779,11 @@ wchar_t *read_input(struct read_input_settings_t *settings) {
     con->multiline_mode = (settings->flags & READ_INPUT_FLAG_MULTILINE) != 0;
   }
   
+  if(HAVE_SETTINGS(settings, history)) {
+    con->history = settings->history;
+    con->history_index = console_history_count(con->history);
+  }
+  
   init_buffer(con);
   
   if(HAVE_SETTINGS(settings, default_input) && settings->default_input) {
@@ -1750,6 +1811,8 @@ wchar_t *read_input(struct read_input_settings_t *settings) {
   
   if(!con->ignore_input_when_stopped) {
     wchar_t *result = con->input_text;
+    console_history_add(con->history, con->input_text, con->input_length);
+    
     con->input_text = NULL;
     con->input_capacity = 0;
     free_console(con);
