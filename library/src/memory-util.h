@@ -28,9 +28,5 @@ BOOL resize_array(void **arr, int *capacity, int item_size, int newsize);
  */
 void *allocate_memory(size_t size);
 
-/** Release a block of memory.
- */
-void free_memory(void *data);
-
 
 #endif // __CONSOLE__MEMORY_UTIL_H__

@@ -1,3 +1,5 @@
+#include <hyper-console.h>
+
 #include "memory-util.h"
 
 #include <assert.h>
@@ -25,7 +27,7 @@ BOOL resize_array(void **arr, int *capacity, int item_size, int newsize) {
     
   new_arr = realloc(*arr, newcap * item_size);
   if(!new_arr) {
-    //free_memory(*arr);
+    //hyper_console_free_memory(*arr);
     //*arr = NULL;
     //*capacity = 0;
     return FALSE;
@@ -40,6 +42,7 @@ void *allocate_memory(size_t size) {
   return malloc(size);
 }
 
-void free_memory(void *data) {
+HYPER_CONSOLE_API
+void hyper_console_free_memory(void *data) {
   free(data);
 }

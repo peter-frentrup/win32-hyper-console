@@ -1,3 +1,5 @@
+#include <hyper-console.h>
+
 #include "debug.h"
 
 #include <windows.h>

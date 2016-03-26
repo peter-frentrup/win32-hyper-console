@@ -11,48 +11,50 @@ struct history_line_t {
   wchar_t content[1];
 };
 
-struct console_history_t {
+struct hyper_console_history_t {
   struct history_line_t **entries;
   int capacity;
   int count;
 };
 
 
-struct console_history_t *console_history_new(int options) {
-  struct console_history_t *hist;
+HYPER_CONSOLE_API
+struct hyper_console_history_t *hyper_console_history_new(int options) {
+  struct hyper_console_history_t *hist;
   
-  hist = allocate_memory(sizeof(struct console_history_t));
+  hist = allocate_memory(sizeof(struct hyper_console_history_t));
   if(!hist)
     return NULL;
   
-  memset(hist, 0, sizeof(struct console_history_t));
+  memset(hist, 0, sizeof(struct hyper_console_history_t));
   
   return hist;
 }
 
 
-void console_history_free(struct console_history_t *hist) {
+HYPER_CONSOLE_API
+void hyper_console_history_free(struct hyper_console_history_t *hist) {
   int i;
   
   if(hist == NULL)
     return;
     
   for(i = 0; i < hist->count; ++i)
-    free_memory(hist->entries[i]);
+    hyper_console_free_memory(hist->entries[i]);
     
-  free_memory(hist->entries);
-  free_memory(hist);
+  hyper_console_free_memory(hist->entries);
+  hyper_console_free_memory(hist);
 }
 
 
-int console_history_count(struct console_history_t *hist) {
+int console_history_count(struct hyper_console_history_t *hist) {
   if(hist == NULL)
     return 0;
     
   return hist->count;
 }
 
-const wchar_t *console_history_get(struct console_history_t *hist, int index, int *length) {
+const wchar_t *console_history_get(struct hyper_console_history_t *hist, int index, int *length) {
   struct history_line_t *line;
   
   assert(hist != NULL);
@@ -74,7 +76,7 @@ const wchar_t *console_history_get(struct console_history_t *hist, int index, in
   return &line->content[0];
 }
 
-void console_history_add(struct console_history_t *hist, const wchar_t *text, int text_length) {
+void console_history_add(struct hyper_console_history_t *hist, const wchar_t *text, int text_length) {
   struct history_line_t *line;
   const wchar_t *prev_text;
   int prev_length;

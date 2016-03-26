@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="app" />
+		<Option platforms="Windows;" />
+		<Option pch_mode="2" />
+		<Option compiler="msvc_2015_x64" />
+		<Build>
+			<Target title="x64-gcc-debug">
+				<Option output="bin/$(TARGET_NAME)/app" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/$(TARGET_NAME)/" />
+				<Option type="1" />
+				<Option compiler="gnu_gcc_x64_compiler" />
+				<Compiler>
+					<Add option="-g" />
+					<Add option="-D_DEBUG" />
+				</Compiler>
+			</Target>
+			<Target title="x64-gcc-release">
+				<Option output="bin/$(TARGET_NAME)/app" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/$(TARGET_NAME)/" />
+				<Option type="1" />
+				<Option compiler="gnu_gcc_x64_compiler" />
+				<Compiler>
+					<Add option="-O2" />
+					<Add option="-DNDEBUG" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+			</Target>
+			<Target title="x86-gcc-debug">
+				<Option output="bin/$(TARGET_NAME)/app" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/$(TARGET_NAME)/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-g" />
+					<Add option="-D_DEBUG" />
+				</Compiler>
+			</Target>
+			<Target title="x86-gcc-release">
+				<Option output="bin/$(TARGET_NAME)/app" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/$(TARGET_NAME)/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-O2" />
+					<Add option="-DNDEBUG" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+			</Target>
+			<Target title="x64-msvc-debug">
+				<Option platforms="Windows;" />
+				<Option output="bin/$(TARGET_NAME)/app" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/$(TARGET_NAME)/" />
+				<Option type="1" />
+				<Option compiler="msvc_2015_x64" />
+				<Compiler>
+					<Add option="/MDd" />
+					<Add option="/W4" />
+					<Add option="/Zi" />
+					<Add option="/D_DEBUG" />
+				</Compiler>
+				<Linker>
+					<Add option="/debug" />
+					<Add option="/DEBUG" />
+					<Add library="msvcrtd.lib" />
+					<Add library="msvcprtd.lib" />
+				</Linker>
+			</Target>
+			<Target title="x64-msvc-release">
+				<Option output="bin/$(TARGET_NAME)/app" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/$(TARGET_NAME)/" />
+				<Option type="1" />
+				<Option compiler="msvc_2015_x64" />
+				<Compiler>
+					<Add option="/MD" />
+					<Add option="/Ox" />
+					<Add option="/W4" />
+					<Add option="/Zi" />
+					<Add option="/DNDEBUG" />
+				</Compiler>
+				<Linker>
+					<Add option="/debug" />
+					<Add library="msvcrt.lib" />
+					<Add library="msvcprt.lib" />
+				</Linker>
+			</Target>
+			<Target title="x86-msvc-debug">
+				<Option platforms="Windows;" />
+				<Option output="bin/$(TARGET_NAME)/app" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/$(TARGET_NAME)/" />
+				<Option type="1" />
+				<Option compiler="msvc_2015" />
+				<Compiler>
+					<Add option="/MDd" />
+					<Add option="/W4" />
+					<Add option="/Zi" />
+					<Add option="/D_DEBUG" />
+				</Compiler>
+				<Linker>
+					<Add option="/debug" />
+					<Add option="/DEBUG" />
+					<Add library="msvcrtd.lib" />
+					<Add library="msvcprtd.lib" />
+				</Linker>
+			</Target>
+			<Target title="x86-msvc-release">
+				<Option output="bin/$(TARGET_NAME)/app" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/$(TARGET_NAME)/" />
+				<Option type="1" />
+				<Option compiler="msvc_2015" />
+				<Compiler>
+					<Add option="/MD" />
+					<Add option="/Ox" />
+					<Add option="/W4" />
+					<Add option="/Zi" />
+					<Add option="/DNDEBUG" />
+				</Compiler>
+				<Linker>
+					<Add option="/debug" />
+					<Add library="msvcrt.lib" />
+					<Add library="msvcprt.lib" />
+				</Linker>
+			</Target>
+		</Build>
+		<VirtualTargets>
+			<Add alias="All" targets="x64-gcc-debug;x64-gcc-release;x86-gcc-debug;x86-gcc-release;x64-msvc-debug;x64-msvc-release;x86-msvc-debug;x86-msvc-release;" />
+		</VirtualTargets>
+		<Compiler>
+			<Add directory="../library/include" />
+		</Compiler>
+		<Linker>
+			<Add library="shell32" />
+			<Add library="user32" />
+			<Add library="ole32" />
+			<Add library="uuid" />
+			<Add library="hyper-console" />
+			<Add directory="../library/$(TARGET_OUTPUT_DIR)" />
+		</Linker>
+		<Unit filename="main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

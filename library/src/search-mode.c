@@ -1,3 +1,5 @@
+#include <hyper-console.h>
+
 #include "search-mode.h"
 #include "console-buffer-io.h"
 #include "memory-util.h"
@@ -275,7 +277,7 @@ static void extended_filter(struct console_search_t *cs, int old_length) {
       tmp->next->prev = prev;
       prev->next = tmp->next;
       
-      free_memory(tmp);
+      hyper_console_free_memory(tmp);
       
       tmp = prev;
     }
@@ -299,7 +301,7 @@ static void extended_filter(struct console_search_t *cs, int old_length) {
     else 
       prev = NULL;
     
-    free_memory(tmp);
+    hyper_console_free_memory(tmp);
       
     cs->current_result = prev;
   }
@@ -358,7 +360,7 @@ static void truncated_filter(struct console_search_t *cs, int old_length) {
       
       current = current->next;
       
-      free_memory(tmp);
+      hyper_console_free_memory(tmp);
     }
     
     cs->current_result = NULL;
@@ -401,7 +403,7 @@ static void reset_filter(struct console_search_t *cs, int old_length) {
       
       current = current->next;
       
-      free_memory(tmp);
+      hyper_console_free_memory(tmp);
     }
     
     cs->current_result = NULL;
@@ -773,28 +775,28 @@ static BOOL start_search_mode(struct console_search_t *cs) {
     read = 0;
     length = csbi.dwSize.X * csbi.dwSize.Y;
     
-    free_memory(cs->screen);
+    hyper_console_free_memory(cs->screen);
     cs->screen = allocate_memory(length * sizeof(wchar_t));
     if( !cs->screen || 
         !console_read_output_character(cs->output_handle, cs->screen, length, pos, &read) ||
         read != length) 
     {
-      free_memory(cs->screen);
+      hyper_console_free_memory(cs->screen);
       cs->screen = NULL;
       return FALSE;
     }
     
     read = 0;
-    free_memory(cs->attributes);
+    hyper_console_free_memory(cs->attributes);
     cs->attributes = allocate_memory(length * sizeof(WORD));
     if( !cs->attributes || 
         !console_read_output_attribute(cs->output_handle, cs->attributes, length, pos, &read) ||
         read != length) 
     {
-      free_memory(cs->screen);
+      hyper_console_free_memory(cs->screen);
       cs->screen = NULL;
       
-      free_memory(cs->attributes);
+      hyper_console_free_memory(cs->attributes);
       cs->attributes = NULL;
       return FALSE;
     }
@@ -1059,7 +1061,7 @@ static void finish_search_mode(struct console_search_t *cs) {
   if(cs->oritinal_title) {
     SetConsoleTitleW(cs->oritinal_title);
     
-    free_memory(cs->oritinal_title);
+    hyper_console_free_memory(cs->oritinal_title);
     cs->oritinal_title = NULL;
   }
   
@@ -1072,12 +1074,12 @@ static void finish_search_mode(struct console_search_t *cs) {
     console_write_output_attribute(cs->output_handle, cs->attributes, length, pos, &written);
   }
   
-  free_memory(cs->screen);
-  free_memory(cs->attributes);
+  hyper_console_free_memory(cs->screen);
+  hyper_console_free_memory(cs->attributes);
   
-  free_memory(cs->highlight_attributes);
-  free_memory(cs->result_attributes);
-  free_memory(cs->filter_text);
+  hyper_console_free_memory(cs->highlight_attributes);
+  hyper_console_free_memory(cs->result_attributes);
+  hyper_console_free_memory(cs->filter_text);
   
   if(cs->current_result) {
     assert(cs->current_result->prev != NULL);
@@ -1091,7 +1093,7 @@ static void finish_search_mode(struct console_search_t *cs) {
       
       cs->current_result = tmp->next;
       
-      free_memory(tmp);
+      hyper_console_free_memory(tmp);
     }
   }
   

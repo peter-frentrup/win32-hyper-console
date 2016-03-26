@@ -1,5 +1,7 @@
 #define _WIN32_WINNT 0x0600
 
+#include <hyper-console.h>
+
 #include "read-input.h"
 #include "console-history.h"
 #include "memory-util.h"
@@ -55,7 +57,7 @@ struct console_input_t {
   CHAR_INFO *prompt;
   int prompt_size;
   
-  struct console_history_t *history;
+  struct hyper_console_history_t *history;
   int history_index;
   
   CHAR_INFO *output_buffer; // [output_size]
@@ -239,7 +241,7 @@ static BOOL read_prompt(struct console_input_t *con, int length) {
     return FALSE;
     
   if(length != con->prompt_size) {
-    free_memory(con->prompt);
+    hyper_console_free_memory(con->prompt);
     con->prompt = NULL;
     con->prompt_size = 0;
     
@@ -267,7 +269,7 @@ static BOOL read_prompt(struct console_input_t *con, int length) {
   region.Right = (SHORT)con->prompt_size;
   region.Bottom = region.Top;
   if(!ReadConsoleOutputW(con->output_handle, con->prompt, bufsize, bufpos, &region)) {
-    free_memory(con->prompt);
+    hyper_console_free_memory(con->prompt);
     con->prompt = NULL;
     con->prompt_size = 0;
     con->error = "ReadConsoleOutputW";
@@ -280,11 +282,11 @@ static BOOL read_prompt(struct console_input_t *con, int length) {
 static void free_console(struct console_input_t *con) {
   assert(con != NULL);
   
-  free_memory(con->input_text);
-  free_memory(con->prompt);
-  free_memory(con->output_buffer);
-  free_memory(con->input_to_output_positions);
-  free_memory(con->output_to_input_positions);
+  hyper_console_free_memory(con->input_text);
+  hyper_console_free_memory(con->prompt);
+  hyper_console_free_memory(con->output_buffer);
+  hyper_console_free_memory(con->input_to_output_positions);
+  hyper_console_free_memory(con->output_to_input_positions);
   memset(con, 0, sizeof(struct console_input_t));
 }
 
@@ -720,11 +722,11 @@ static BOOL write_output_buffer_lines(struct console_input_t *con) {
       region.Bottom = region.Top + con->dirty_lines - 1;
       if(!WriteConsoleOutputW(con->output_handle, empty, bufsize, bufpos, &region)) {
         con->error = "WriteConsoleOutputW empty";
-        free_memory(empty);
+        hyper_console_free_memory(empty);
         return FALSE;
       }
       
-      free_memory(empty);
+      hyper_console_free_memory(empty);
     }
   }
   con->dirty_lines = lines;
@@ -1624,7 +1626,7 @@ static BOOL input_loop(struct console_input_t *con) {
         
         event_eaten = console_handle_search_mode(con->input_handle, con->output_handle, &event, filter);
         
-        free_memory(filter);
+        hyper_console_free_memory(filter);
         if(event_eaten)
           continue;
       }
@@ -1690,7 +1692,7 @@ static BOOL input_loop(struct console_input_t *con) {
   return !con->error;
 }
 
-static void print_error() {
+static void print_error(void) {
   wchar_t *msgbuf;
   DWORD dw = GetLastError();
   
@@ -1753,13 +1755,14 @@ static wchar_t *read_file(FILE *file, BOOL multiline_mode) {
     }
   }
   
-  free_memory(str);
+  hyper_console_free_memory(str);
   return NULL;
 }
 
-#define HAVE_SETTINGS(settings, name) ((settings) && (settings)->size >= offsetof(struct read_input_settings_t, name))
+#define HAVE_SETTINGS(settings, name) ((settings) && (settings)->size >= offsetof(struct hyper_console_settings_t, name))
 
-wchar_t *read_input(struct read_input_settings_t *settings) {
+HYPER_CONSOLE_API
+wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
   struct console_input_t con[1];
   struct console_input_t *old_con;
   
@@ -1767,7 +1770,7 @@ wchar_t *read_input(struct read_input_settings_t *settings) {
     BOOL multiline_mode = FALSE;
   
     if(HAVE_SETTINGS(settings, flags)) {
-      multiline_mode = (settings->flags & READ_INPUT_FLAG_MULTILINE) != 0;
+      multiline_mode = (settings->flags & HYPER_CONSOLE_FLAGS_MULTILINE) != 0;
     }
     
     /* settings->default_input is ignored */
@@ -1776,7 +1779,7 @@ wchar_t *read_input(struct read_input_settings_t *settings) {
   }
   
   if(HAVE_SETTINGS(settings, flags)) {
-    con->multiline_mode = (settings->flags & READ_INPUT_FLAG_MULTILINE) != 0;
+    con->multiline_mode = (settings->flags & HYPER_CONSOLE_FLAGS_MULTILINE) != 0;
   }
   
   if(HAVE_SETTINGS(settings, history)) {

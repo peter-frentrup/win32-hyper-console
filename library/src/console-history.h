@@ -2,31 +2,14 @@
 #define __CONSOLE_HISTORY_H__
 
 
-#include <wchar.h>
-
-
-struct console_history_t;
-
-
-/** Create a new console history buffer.
-
-  \param options History option flags for future use. Must be 0.
- */
-struct console_history_t *console_history_new(int options);
-
-
-/** Free a console history buffer.
-
-  \param hist A console history buffer or NULL.
- */
-void console_history_free(struct console_history_t *hist);
+#include <hyper-console.h>
 
 
 /** Get the number of entries in the history.
   
   \param hist A console history buffer or NULL.
  */
-int console_history_count(struct console_history_t *hist);
+int console_history_count(struct hyper_console_history_t *hist);
 
 
 /** Get a history entry.
@@ -37,7 +20,7 @@ int console_history_count(struct console_history_t *hist);
   
   \return The history entry or NULL on error.
  */
-const wchar_t *console_history_get(struct console_history_t *hist, int index, int *length);
+const wchar_t *console_history_get(struct hyper_console_history_t *hist, int index, int *length);
 
 /** Add an entry to the history.
 
@@ -47,7 +30,7 @@ const wchar_t *console_history_get(struct console_history_t *hist, int index, in
 
   This function copies the \a text buffer. The entry may be discarded depending on the history buffer options.
  */
-void console_history_add(struct console_history_t *hist, const wchar_t *text, int text_length);
+void console_history_add(struct hyper_console_history_t *hist, const wchar_t *text, int text_length);
 
 
 #endif // __CONSOLE_HISTORY_H__

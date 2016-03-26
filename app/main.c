@@ -1,11 +1,15 @@
 #define COBJMACROS
 
-#include "read-input.h"
-#include "console-history.h"
-#include "memory-util.h"
-#include "hyperlink-output.h"
-#include "debug.h"
-#include "text-util.h"
+#include <hyper-console.h>
+
+#include <wchar.h>
+
+//#include "read-input.h"
+//#include "console-history.h"
+//#include "memory-util.h"
+//#include "hyperlink-output.h"
+//#include "debug.h"
+//#include "text-util.h"
 
 #include <assert.h>
 #include <io.h>
@@ -29,6 +33,33 @@ static WORD file_link_color = FOREGROUND_RED | FOREGROUND_GREEN;
 static WORD run_link_color = FOREGROUND_RED | FOREGROUND_BLUE;
 static long interrupted = FALSE;
 
+static void debug_printf(const wchar_t *format, ...) {
+  va_list args;
+  wchar_t buffer[1024];
+  
+  va_start(args, format);
+  StringCbVPrintfW(buffer, sizeof(buffer), format, args);
+  va_end(args);
+  
+  OutputDebugStringW(buffer);
+}
+
+static wchar_t *append_text(
+  wchar_t       *dst, 
+  const wchar_t *dst_end, 
+  const wchar_t *src, 
+  const wchar_t *optional_src_end
+) {
+  assert(dst != NULL);
+  assert(dst_end != NULL);
+  assert(src != NULL);
+  
+  while(dst != dst_end && *src && src != optional_src_end)
+    *dst++ = *src++;
+    
+  return dst;
+}
+
 
 static void write_unicode(const wchar_t *str) {
   int oldmode;
@@ -45,12 +76,12 @@ static void write_unicode(const wchar_t *str) {
 
 static void write_simple_link(const wchar_t *title, const wchar_t *input_text, const wchar_t *content) {
   fflush(stdout);
-  start_hyperlink(title);
-  set_hyperlink_input_text(input_text);
+  hyper_console_start_link(title);
+  hyper_console_set_link_input_text(input_text);
   
   write_unicode(content);
   
-  end_hyperlink();
+  hyper_console_end_link();
 }
 
 static const wchar_t *get_extension(const wchar_t *filename) {
@@ -134,11 +165,11 @@ static BOOL run_command_needs_quotes(const wchar_t *filename) {
 }
 
 static void write_file_link(
-    const wchar_t *filename,
-    const wchar_t *optional_owning_directory,
-    const wchar_t *optional_text,
-    const wchar_t *optional_args,
-    BOOL is_directory
+  const wchar_t *filename,
+  const wchar_t *optional_owning_directory,
+  const wchar_t *optional_text,
+  const wchar_t *optional_args,
+  BOOL is_directory
 ) {
   wchar_t cmd[2 * MAX_PATH + 20];
   
@@ -165,16 +196,16 @@ static void write_file_link(
         const wchar_t *end = optional_owning_directory;
         while(*end)
           ++end;
-        
+          
         if(end[-1] == L'\\')
           dir_baskslash = L"";
       }
       
-      StringCbPrintfW(cmd, sizeof(cmd), L"cd+dir %s%s%s%s", 
-        optional_owning_directory, 
-        dir_baskslash,
-        filename, 
-        final_baskslash);
+      StringCbPrintfW(cmd, sizeof(cmd), L"cd+dir %s%s%s%s",
+                      optional_owning_directory,
+                      dir_baskslash,
+                      filename,
+                      final_baskslash);
     }
     else
       StringCbPrintfW(cmd, sizeof(cmd), L"cd+dir %s%s", filename, final_baskslash);
@@ -195,25 +226,25 @@ static void write_file_link(
     quote = need_quote ? L"\"" : L"";
     
     StringCbPrintfW(cmd, sizeof(cmd), L"run %s%s%s%s%s%s%s",
-        quote,
-        optional_owning_directory ? optional_owning_directory : L"",
-        optional_owning_directory ? L"\\" : L"",
-        filename,
-        quote,
-        (optional_args && *optional_args) ? L" " : L"",
-        optional_args ? optional_args : L"");
-        
+                    quote,
+                    optional_owning_directory ? optional_owning_directory : L"",
+                    optional_owning_directory ? L"\\" : L"",
+                    filename,
+                    quote,
+                    (optional_args && *optional_args) ? L" " : L"",
+                    optional_args ? optional_args : L"");
+                    
     if(!optional_text)
       optional_text = cmd + 4;
       
     fflush(stdout);
-    start_hyperlink(cmd);
-    set_hyperlink_input_text(cmd);
-    set_hyperlink_color(run_link_color);
+    hyper_console_start_link(cmd);
+    hyper_console_set_link_input_text(cmd);
+    hyper_console_set_link_color(run_link_color);
     
     write_unicode(optional_text);
     
-    end_hyperlink();
+    hyper_console_end_link();
   }
   else {
     if(optional_owning_directory)
@@ -225,13 +256,13 @@ static void write_file_link(
       optional_text = cmd + 5;
       
     fflush(stdout);
-    start_hyperlink(cmd);
-    set_hyperlink_input_text(cmd);
-    set_hyperlink_color(file_link_color);
+    hyper_console_start_link(cmd);
+    hyper_console_set_link_input_text(cmd);
+    hyper_console_set_link_color(file_link_color);
     
     write_unicode(optional_text);
     
-    end_hyperlink();
+    hyper_console_end_link();
   }
 }
 
@@ -282,7 +313,7 @@ static void change_directory(const wchar_t *command_rest) {
   printf("\\\n");
 }
 
-/* This is REPARSE_DATA_BUFFER. That structure is not included in Windows SDK, 
+/* This is REPARSE_DATA_BUFFER. That structure is not included in Windows SDK,
    but some Mingw headers and the Windows Driver SDK have it.
  */
 struct reparse_data_buffer_t {
@@ -320,29 +351,29 @@ static void print_reparse_point_info(const wchar_t *file, DWORD reparse_tag, BOO
   DWORD nOutBufferSize;
   
   HANDLE hDir = CreateFileW(
-      file,
-      0,
-      FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
-      NULL,
-      OPEN_EXISTING,
-      FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
-      NULL);
-      
+                  file,
+                  0,
+                  FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+                  NULL,
+                  OPEN_EXISTING,
+                  FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
+                  NULL);
+                  
   if(hDir ==  INVALID_HANDLE_VALUE) {
     debug_printf(L"DeviceIoControl failed: %d at %s\n", (int)GetLastError(), file);
     return;
   }
   
   success = DeviceIoControl(
-      hDir,
-      FSCTL_GET_REPARSE_POINT,
-      NULL,
-      0,
-      &data,
-      sizeof(data),
-      &nOutBufferSize,
-      NULL);
-      
+              hDir,
+              FSCTL_GET_REPARSE_POINT,
+              NULL,
+              0,
+              &data,
+              sizeof(data),
+              &nOutBufferSize,
+              NULL);
+              
   if(success) {
     wchar_t *subs;
     DWORD length;
@@ -495,14 +526,14 @@ static void list_directory(void) {
     FileTimeToSystemTime( &filetime, &datetime );
     
     StringCbPrintfW(
-        datetime_string, sizeof(datetime_string),
-        L"%4d-%02d-%02d  %02d:%02d ",
-        (int)datetime.wYear,
-        (int)datetime.wMonth,
-        (int)datetime.wDay,
-        (int)datetime.wHour,
-        (int)datetime.wMinute);
-        
+      datetime_string, sizeof(datetime_string),
+      L"%4d-%02d-%02d  %02d:%02d ",
+      (int)datetime.wYear,
+      (int)datetime.wMonth,
+      (int)datetime.wDay,
+      (int)datetime.wHour,
+      (int)datetime.wMinute);
+      
     write_unicode(datetime_string);
     
     if (is_directory) {
@@ -577,14 +608,14 @@ static BOOL find_next_directory(HANDLE *hFind, WIN32_FIND_DATAW *ffd) {
   
   if(*hFind == INVALID_HANDLE_VALUE)
     return FALSE;
-  
-  while(FindNextFileW(*hFind, ffd)) {
-    if(InterlockedOr(&interrupted, FALSE)) 
-      break;
     
+  while(FindNextFileW(*hFind, ffd)) {
+    if(InterlockedOr(&interrupted, FALSE))
+      break;
+      
     if(ffd->dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)
       continue;
-    
+      
     if(ffd->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
       return TRUE;
   }
@@ -622,11 +653,11 @@ static void show_directory_tree_helper(struct show_tree_t *context) {
   
   if(InterlockedOr(&interrupted, FALSE))
     return;
-  
+    
   s = append_text(path_end, path_buffer_end, L"\\*", NULL);
   if(s == path_buffer_end)
     return;
-  
+    
   *s = L'\0';
   hFind = FindFirstFileW(context->path, &ffd);
   if(hFind == INVALID_HANDLE_VALUE) {
@@ -635,7 +666,7 @@ static void show_directory_tree_helper(struct show_tree_t *context) {
   }
   
   if((ffd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) ||
-    !(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) 
+      !(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
   {
     find_next_directory(&hFind, &ffd);
   }
@@ -645,7 +676,7 @@ static void show_directory_tree_helper(struct show_tree_t *context) {
     
   if(wcscmp(ffd.cFileName, L"..") == 0)
     find_next_directory(&hFind, &ffd);
-  
+    
   while(hFind != INVALID_HANDLE_VALUE) {
     WIN32_FIND_DATAW dir_ffd = ffd;
     BOOL have_next;
@@ -666,7 +697,7 @@ static void show_directory_tree_helper(struct show_tree_t *context) {
         hFind = INVALID_HANDLE_VALUE;
         break;
       }
-    
+      
       s = append_text(indent_start, indent_buffer_end, context->indent_last, NULL);
       *s = L'\0';
     }
@@ -723,10 +754,10 @@ static void show_directory_tree(void) {
   write_path_links(context->path, 0);
   printf("\n");
   
-  if(length > 0 && context->path[length-1] == L'\\')
+  if(length > 0 && context->path[length - 1] == L'\\')
     --length;
     
-  
+    
   context->indent_end = context->indent_buffer;
   context->path_end = context->path + length;
   
@@ -742,12 +773,12 @@ static void list_drives(void) {
   
   printf("\n");
   
-  for(i = 0;i < 32;++i) {
+  for(i = 0; i < 32; ++i) {
     if(drives_available & (1 << i)) {
       drive[0] = (wchar_t)(L'A' + i);
       
       if(GetVolumeInformationW(drive, volume_name, ARRAYSIZE(volume_name), NULL, NULL, NULL, NULL, 0)) {
-        
+      
         StringCbPrintfW(text, sizeof(text), L"%s (%c:)", volume_name, L'A' + i);
         
         printf("  ");
@@ -788,15 +819,15 @@ static void write_links_sentence(const wchar_t *text) {
       fflush(stdout);
       ch = *e;
       *e = L'\0';
-      start_hyperlink(s);
-      set_hyperlink_input_text(s);
+      hyper_console_start_link(s);
+      hyper_console_set_link_input_text(s);
       *e = ch;
       
       while(s != e)
         putwchar(*s++);
         
       fflush(stdout);
-      end_hyperlink();
+      hyper_console_end_link();
     }
   }
   
@@ -833,26 +864,26 @@ static void change_color(const wchar_t *arg) {
     
   if(first_word_equals(arg, L"/?")) {
     printf(
-        "Change the default foreground and background color of the console window.\n"
-        "\n"
-        "color [attr]\n"
-        "\n"
-        "  attr   Specifies the color attributes.\n"
-        "\n"
-        "The color attributes are a 2-digit hex number. "
-        "The first digit specifies background, the second forground. "
-        "Each digit can be one of\n"
-        "\n"
-        "    0 = black          8 = dark gray \n"
-        "    1 = dark blue      9 = blue      \n"
-        "    2 = dark green     A = green     \n"
-        "    3 = teal           B = cyan      \n"
-        "    4 = dark red       C = red       \n"
-        "    5 = purple         D = magenta   \n"
-        "    6 = ochre          E = yellow    \n"
-        "    7 = light gray     F = white     \n"
-        "\n");
-        
+      "Change the default foreground and background color of the console window.\n"
+      "\n"
+      "color [attr]\n"
+      "\n"
+      "  attr   Specifies the color attributes.\n"
+      "\n"
+      "The color attributes are a 2-digit hex number. "
+      "The first digit specifies background, the second forground. "
+      "Each digit can be one of\n"
+      "\n"
+      "    0 = black          8 = dark gray \n"
+      "    1 = dark blue      9 = blue      \n"
+      "    2 = dark green     A = green     \n"
+      "    3 = teal           B = cyan      \n"
+      "    4 = dark red       C = red       \n"
+      "    5 = purple         D = magenta   \n"
+      "    6 = ochre          E = yellow    \n"
+      "    7 = light gray     F = white     \n"
+      "\n");
+      
     printf("Example: ");
     write_simple_link(L"red text on white background", L"color fc", L"color fc");
     printf("\n");
@@ -869,15 +900,15 @@ static void change_color(const wchar_t *arg) {
           
           StringCbPrintfW(link, sizeof(link), L"color %x%x", bg, fg);
           fflush(stdout);
-          start_hyperlink(link);
-          set_hyperlink_input_text(link);
-          set_hyperlink_color((bg << 4) | fg);
+          hyper_console_start_link(link);
+          hyper_console_set_link_input_text(link);
+          hyper_console_set_link_color((bg << 4) | fg);
           
           SetConsoleTextAttribute(hStdout, (bg << 4) | fg);
           printf("%x%x", bg, fg);
           
           fflush(stdout);
-          end_hyperlink();
+          hyper_console_end_link();
         }
         else {
           printf("  ");
@@ -930,13 +961,13 @@ static void change_color(const wchar_t *arg) {
     
     printf("Current setting is ");
     fflush(stdout);
-    start_hyperlink(link);
-    set_hyperlink_input_text(link);
+    hyper_console_start_link(link);
+    hyper_console_set_link_input_text(link);
     
     printf("color %02x", (unsigned)csbi.wAttributes);
     fflush(stdout);
     
-    end_hyperlink();
+    hyper_console_end_link();
     printf(".\n");
   }
 }
@@ -991,8 +1022,8 @@ static void show_help(void) {
   write_simple_link(L"get or set console color", L"color /?", L"color");
   printf("\t Modify the console color.\n");
   
-  write_simple_link(L"debug information", L"debug", L"debug");
-  printf("\t Show the current console buffer status.\n");
+//  write_simple_link(L"debug information", L"debug", L"debug");
+//  printf("\t Show the current console buffer status.\n");
   
   write_simple_link(L"list current directory", L"dir", L"dir");
   printf("\t List the content of the current directory.\n");
@@ -1035,16 +1066,16 @@ static void handle_sigint(int sig) {
 
 int main() {
   wchar_t *str = NULL;
-  struct read_input_settings_t settings;
+  struct hyper_console_settings_t settings;
   
   memset(&settings, 0, sizeof(settings));
   settings.size = sizeof(settings);
   settings.default_input = L"help";
-  settings.history = console_history_new(0);
+  settings.history = hyper_console_history_new(0);
   
   signal(SIGINT, handle_sigint);
   
-  init_hyperlink_system();
+  hyper_console_init_hyperlink_system();
   
   write_simple_link(L"show available options", L"help", L"Help");
   printf(" needed? ");
@@ -1069,20 +1100,20 @@ int main() {
     write_current_directory_path();
     printf(">");
     
-    free_memory(str);
-    str = read_input(&settings);
+    hyper_console_free_memory(str);
+    str = hyper_console_readline(&settings);
     if(!str)
       continue;
       
     if(wcscmp(str, L"multi") == 0) {
       printf("Switching to multi-line mode.\n");
-      settings.flags |= READ_INPUT_FLAG_MULTILINE;
+      settings.flags |= HYPER_CONSOLE_FLAGS_MULTILINE;
       continue;
     }
     
     if(wcscmp(str, L"single") == 0) {
       printf("Switching to single-line mode.\n");
-      settings.flags &= ~READ_INPUT_FLAG_MULTILINE;
+      settings.flags &= ~HYPER_CONSOLE_FLAGS_MULTILINE;
       continue;
     }
     
@@ -1127,10 +1158,10 @@ int main() {
       continue;
     }
     
-    if(wcscmp(str, L"debug") == 0) {
-      hyperlink_system_print_debug_info();
-      continue;
-    }
+//    if(wcscmp(str, L"debug") == 0) {
+//      hyperlink_system_print_debug_info();
+//      continue;
+//    }
     
     if(first_word_equals(str, L"open")) {
       open_document(str + 4);
@@ -1149,12 +1180,12 @@ int main() {
     
     if(wcscmp(str, L"lorem") == 0) {
       write_links_sentence(
-          L"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt "
-          L"ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation "
-          L"ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in "
-          L"reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur "
-          L"sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est "
-          L"laborum.\n"
+        L"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt "
+        L"ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation "
+        L"ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in "
+        L"reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur "
+        L"sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est "
+        L"laborum.\n"
       );
       continue;
     }
@@ -1167,8 +1198,8 @@ int main() {
     write_unicode(L"'\n");
   }
   
-  done_hyperlink_system();
-  console_history_free(settings.history);
+  hyper_console_done_hyperlink_system();
+  hyper_console_history_free(settings.history);
   
   return 0;
 }

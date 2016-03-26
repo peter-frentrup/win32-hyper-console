@@ -1,4 +1,7 @@
+#include <hyper-console.h>
+
 #include "mark-mode.h"
+
 #include "console-buffer-io.h"
 #include "debug.h"
 #include "memory-util.h"
@@ -258,7 +261,7 @@ static wchar_t *cat_console_line(
 
 /** Get the non-block-mode selected text.
 
-  \return The unwrapped text lines. Should be freed with free_memory(). NULL on error.
+  \return The unwrapped text lines. Should be freed with hyper_console_free_memory(). NULL on error.
  */
 static wchar_t *get_selection_lines(struct console_mark_t *cm, int *total_length) {
   COORD start;
@@ -320,7 +323,7 @@ static wchar_t *get_selection_lines(struct console_mark_t *cm, int *total_length
 /** Get the block-mode selected text.
 
   \return The rectangle block of lines, trimmed ad line ends. 
-  Should be freed with free_memory(). NULL on error.
+  Should be freed with hyper_console_free_memory(). NULL on error.
  */
 static wchar_t *get_selection_block_lines(struct console_mark_t *cm, int *total_length) {
   COORD start;
@@ -402,7 +405,7 @@ static void copy_output_to_clipboard(struct console_mark_t *cm) {
     HGLOBAL copy_handle = GlobalAlloc(GMEM_MOVEABLE, (length + 1) * sizeof(wchar_t));
     
     if(!copy_handle) {
-      free_memory(str);
+      hyper_console_free_memory(str);
       CloseClipboard();
       return;
     }
@@ -416,7 +419,7 @@ static void copy_output_to_clipboard(struct console_mark_t *cm) {
     CloseClipboard();
   }
   
-  free_memory(str);
+  hyper_console_free_memory(str);
 }
 
 
@@ -704,7 +707,7 @@ static BOOL run_mark_mode(struct console_mark_t *cm, INPUT_RECORD *event) {
       
       console_handle_search_mode(cm->input_handle, cm->output_handle, event, filter);
       
-      free_memory(filter);
+      hyper_console_free_memory(filter);
     }
   };
 }
@@ -720,7 +723,7 @@ static void finish_mark_mode(struct console_mark_t *cm) {
   if(cm->oritinal_title) {
     SetConsoleTitleW(cm->oritinal_title);
     
-    free_memory(cm->oritinal_title);
+    hyper_console_free_memory(cm->oritinal_title);
     cm->oritinal_title = NULL;
   }
   

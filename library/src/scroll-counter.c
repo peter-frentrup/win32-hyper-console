@@ -1,4 +1,7 @@
+#include <hyper-console.h>
+
 #include "scroll-counter.h"
+
 #include "console-buffer-io.h"
 #include "memory-util.h"
 
@@ -8,9 +11,9 @@
 
 #define MIN(A, B)  ((A) < (B) ? (A) : (B))
 
-/* Due to line (un-)wrapping, global lines can map to screen lines in the 
+/* Due to line (un-)wrapping, global lines can map to screen lines in the
    following ways.
-   
+
        Global     G->1   G->2    Local1  1->G      Loc2  2->G
    11  XXXXX      0:0    0:0     XXXXXY  11:0      XXXX  11:0
    12  YYY        0:5    1:1     YY....  12:1      XYYY  11:4
@@ -87,7 +90,7 @@ static struct text_line_t *create_text_line(int length) {
 }
 
 static void free_text_line(struct text_line_t *line) {
-  free_memory(line);
+  hyper_console_free_memory(line);
 }
 
 
@@ -102,10 +105,10 @@ static void remove_lines_front(struct text_array_t *text, int num_remove) {
     free_text_line(text->lines[i]);
     
   memmove(
-      text->lines,
-      text->lines + num_remove,
-      (text->count - num_remove) * sizeof(struct text_line_t*));
-      
+    text->lines,
+    text->lines + num_remove,
+    (text->count - num_remove) * sizeof(struct text_line_t*));
+    
   text->count -= num_remove;
 }
 
@@ -117,7 +120,7 @@ static void clear_lines(struct text_array_t *text) {
   for(i = 0; i < text->count; ++i)
     free_text_line(text->lines[i]);
     
-  free_memory(text->lines);
+  hyper_console_free_memory(text->lines);
   memset(text, 0, sizeof(*text));
 }
 
@@ -130,10 +133,10 @@ static BOOL append_null_lines(struct text_array_t *text, int num_add) {
     return FALSE;
     
   if(!resize_array(
-      (void**)&text->lines,
-      &text->capacity,
-      sizeof(struct text_line_t*),
-      text->count + num_add))
+        (void**)&text->lines,
+        &text->capacity,
+        sizeof(struct text_line_t*),
+        text->count + num_add))
   {
     return FALSE;
   }
@@ -150,10 +153,10 @@ static BOOL resize_line_numbers_array(struct line_numbers_array_t *array, int co
   assert(count >= 0);
   
   if(resize_array(
-      (void**)&array->line_starts,
-      &array->capacity,
-      sizeof(array->line_starts[0]),
-      count))
+        (void**)&array->line_starts,
+        &array->capacity,
+        sizeof(array->line_starts[0]),
+        count))
   {
     array->count = count;
     
@@ -167,7 +170,7 @@ static void clear_line_numbers_array(struct line_numbers_array_t *array)  {
 
   assert(array != NULL);
   
-  free_memory(array->line_starts);
+  hyper_console_free_memory(array->line_starts);
   
   memset(array, 0, sizeof(*array));
 }
@@ -242,12 +245,12 @@ static int is_match(const struct text_line_t *original, const wchar_t *visible, 
   @return The number of visible lines matched.
  */
 static int apply_match_at(
-    const struct text_array_t *original,
-    int orig_start,
-    int past_lines_count,
-    struct global_coord_t *visible_coords,
-    const wchar_t *visible,
-    COORD visible_size
+  const struct text_array_t *original,
+  int orig_start,
+  int past_lines_count,
+  struct global_coord_t *visible_coords,
+  const wchar_t *visible,
+  COORD visible_size
 ) {
   int visible_matched_lines = 0;
   
@@ -291,13 +294,13 @@ static void match_lines(struct console_scrollback_t *cs, const wchar_t *visible,
     struct global_coord_t *vis_coords = cs->visible_line_numbers.line_starts;
     
     int vis_match = apply_match_at(
-        &cs->old_lines,
-        first,
-        cs->past_lines_count,
-        cs->visible_line_numbers.line_starts,
-        visible,
-        visible_size);
-        
+                      &cs->old_lines,
+                      first,
+                      cs->past_lines_count,
+                      cs->visible_line_numbers.line_starts,
+                      visible,
+                      visible_size);
+                      
     assert(vis_match <= visible_size.Y);
     
     if(vis_match > 0) {
@@ -405,7 +408,7 @@ void console_scrollback_free(struct console_scrollback_t *cs) {
     
   clear_lines(&cs->old_lines);
   clear_line_numbers_array(&cs->visible_line_numbers);
-  free_memory(cs);
+  hyper_console_free_memory(cs);
 }
 
 void console_scrollback_update(struct console_scrollback_t *cs, int known_visible_lines) {
@@ -443,20 +446,20 @@ void console_scrollback_update(struct console_scrollback_t *cs, int known_visibl
     pos.X = 0;
     pos.Y = 0;
     num_read = 0;
-    if(console_read_output_character(
-        cs->output_handle,
-        visible_lines,
-        visible_size.X * visible_size.Y,
-        pos,
-        &num_read)
-        && num_read == visible_size.X * visible_size.Y)
+    if( console_read_output_character(
+          cs->output_handle,
+          visible_lines,
+          visible_size.X * visible_size.Y,
+          pos,
+          &num_read) &&
+        num_read == visible_size.X * visible_size.Y)
     {
       match_lines(cs, visible_lines, visible_size);
       clean_old_lines(cs);
       append_new_known_lines(cs, visible_lines, visible_size);
     }
     
-    free_memory(visible_lines);
+    hyper_console_free_memory(visible_lines);
   }
   
 }
@@ -513,7 +516,7 @@ BOOL console_scollback_global_to_local(struct console_scrollback_t *cs, int line
   
   if(cs == NULL)
     return FALSE;
-  
+    
   vis_y_count = cs->visible_line_numbers.count;
   
   if(line < cs->past_lines_count)

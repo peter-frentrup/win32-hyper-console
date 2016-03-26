@@ -1,3 +1,5 @@
+#include <hyper-console.h>
+
 #include "text-util.h"
 
 #include <assert.h>

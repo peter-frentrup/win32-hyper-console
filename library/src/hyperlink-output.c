@@ -1,4 +1,5 @@
 #include "hyperlink-output.h"
+
 #include "console-buffer-io.h"
 #include "read-input.h"
 #include "scroll-counter.h"
@@ -92,7 +93,7 @@ static BOOL hs_handle_events(struct hyperlink_collection_t *hc, INPUT_RECORD *ev
 static void hs_start_input(struct hyperlink_collection_t *hc, int console_width, int pre_input_lines);
 static void hs_end_input(struct hyperlink_collection_t *hc);
 
-static void hs_print_debug_info(struct hyperlink_collection_t *hc);
+//static void hs_print_debug_info(struct hyperlink_collection_t *hc);
 
 static void init_hyperlink_collection(struct hyperlink_collection_t *hc) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -139,7 +140,7 @@ static void free_hyperlink_collection(struct hyperlink_collection_t *hc) {
     
   console_scrollback_free(hc->scrollback);
   
-  //free_memory(hc->old_title);
+  //hyper_console_free_memory(hc->old_title);
   memset(hc, 0, sizeof(struct hyperlink_collection_t));
 }
 
@@ -154,10 +155,10 @@ static void free_link_at(struct hyperlink_t **last_link) {
     
   *last_link = link->prev_link;
   
-  free_memory(link->title);
-  free_memory(link->input_text);
-  free_memory(link->inactive_attributes);
-  free_memory(link);
+  hyper_console_free_memory(link->title);
+  hyper_console_free_memory(link->input_text);
+  hyper_console_free_memory(link->inactive_attributes);
+  hyper_console_free_memory(link);
 }
 
 static void clean_old_links(struct hyperlink_collection_t *hc, int first_keep_line) {
@@ -308,7 +309,7 @@ static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t
   assert(hc->num_open_links > 0);
   assert(link != NULL);
   
-  free_memory(link->title);
+  hyper_console_free_memory(link->title);
   if(title) {
     link->title = allocate_memory((title_length + 1) * sizeof(wchar_t));
     if(link->title) {
@@ -346,7 +347,7 @@ static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wc
   assert(hc->num_open_links > 0);
   assert(link != NULL);
   
-  free_memory(link->input_text);
+  hyper_console_free_memory(link->input_text);
   if(text) {
     link->input_text = allocate_memory((text_length + 1) * sizeof(wchar_t));
     if(link->input_text) {
@@ -508,12 +509,12 @@ static BOOL invert_link_colors(struct hyperlink_collection_t *hc, const struct h
     }
     
     if(WriteConsoleOutputAttribute(hc->output_handle, attributes, length, start, &num_valid)) {
-      free_memory(attributes);
+      hyper_console_free_memory(attributes);
       return TRUE;
     }
   }
   
-  free_memory(attributes);
+  hyper_console_free_memory(attributes);
   return FALSE;
 }
 
@@ -531,7 +532,7 @@ static BOOL activate_link(struct hyperlink_collection_t *hc, struct hyperlink_t 
     return FALSE;
     
   link->inactive_attribute_count = 0;
-  free_memory(link->inactive_attributes);
+  hyper_console_free_memory(link->inactive_attributes);
   
   link->inactive_attributes = allocate_memory(length * sizeof(WORD));
   if(link->inactive_attributes == NULL)
@@ -548,7 +549,7 @@ static BOOL activate_link(struct hyperlink_collection_t *hc, struct hyperlink_t 
         
       WriteConsoleOutputAttribute(hc->output_handle, new_attributes, length, start, &num_valid);
       
-      free_memory(new_attributes);
+      hyper_console_free_memory(new_attributes);
     }
     
     return TRUE;
@@ -857,7 +858,7 @@ static void hs_end_input(struct hyperlink_collection_t *hc) {
   set_console_title(hc, hc->old_title);
 }
 
-
+/*
 static void hs_print_debug_info(struct hyperlink_collection_t *hc) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   COORD pos;
@@ -913,13 +914,14 @@ static void hs_print_debug_info(struct hyperlink_collection_t *hc) {
     fprintf(stderr, "No known global position\n");
   }
 }
-
+*/
 
 static BOOL _have_hyperlink_system = FALSE;
 struct hyperlink_collection_t _global_links[1];
 static CRITICAL_SECTION _cs_global_links[1];
 
-void start_hyperlink(const wchar_t *title) {
+HYPER_CONSOLE_API
+void hyper_console_start_link(const wchar_t *title) {
   assert(_have_hyperlink_system);
   
   EnterCriticalSection(_cs_global_links);
@@ -930,7 +932,8 @@ void start_hyperlink(const wchar_t *title) {
   LeaveCriticalSection(_cs_global_links);
 }
 
-void end_hyperlink(void) {
+HYPER_CONSOLE_API
+void hyper_console_end_link(void) {
   assert(_have_hyperlink_system);
   
   EnterCriticalSection(_cs_global_links);
@@ -940,7 +943,8 @@ void end_hyperlink(void) {
   LeaveCriticalSection(_cs_global_links);
 }
 
-void set_hyperlink_input_text(const wchar_t *text) {
+HYPER_CONSOLE_API
+void hyper_console_set_link_input_text(const wchar_t *text) {
   assert(_have_hyperlink_system);
   
   EnterCriticalSection(_cs_global_links);
@@ -950,7 +954,8 @@ void set_hyperlink_input_text(const wchar_t *text) {
   LeaveCriticalSection(_cs_global_links);
 }
 
-WORD set_hyperlink_color(WORD attribute) {
+HYPER_CONSOLE_API
+WORD hyper_console_set_link_color(WORD attribute) {
   WORD old_color;
   
   assert(_have_hyperlink_system);
@@ -1001,6 +1006,7 @@ void hyperlink_system_end_input(void) {
   LeaveCriticalSection(_cs_global_links);
 }
 
+/*
 void hyperlink_system_print_debug_info(void) {
   if(!_have_hyperlink_system)
     return;
@@ -1011,8 +1017,10 @@ void hyperlink_system_print_debug_info(void) {
   
   LeaveCriticalSection(_cs_global_links);
 }
+*/
 
-void init_hyperlink_system(void) {
+HYPER_CONSOLE_API
+void hyper_console_init_hyperlink_system(void) {
   assert(!_have_hyperlink_system);
   
   InitializeCriticalSection(_cs_global_links);
@@ -1021,7 +1029,8 @@ void init_hyperlink_system(void) {
   _have_hyperlink_system = TRUE;
 }
 
-void done_hyperlink_system(void) {
+HYPER_CONSOLE_API
+void hyper_console_done_hyperlink_system(void) {
   assert(_have_hyperlink_system);
   
   _have_hyperlink_system = FALSE;

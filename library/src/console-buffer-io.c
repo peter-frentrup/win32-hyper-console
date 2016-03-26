@@ -1,4 +1,7 @@
+#include <hyper-console.h>
+
 #include "console-buffer-io.h"
+
 #include "debug.h"
 #include "memory-util.h"
 #include "text-util.h"
@@ -438,7 +441,7 @@ void console_clean_lines(HANDLE hConsoleOutput, int num_lines) {
     }
   }
   
-  free_memory(line_chars);
+  hyper_console_free_memory(line_chars);
 }
 
 BOOL console_scroll_wheel(HANDLE hConsoleOutput, const MOUSE_EVENT_RECORD *er) {
@@ -706,11 +709,11 @@ BOOL console_get_screen_word_start_end(HANDLE hConsoleOutput, COORD pos, COORD *
     start->Y += (SHORT)(s / csbi.dwSize.X);
     start->X +=         s % csbi.dwSize.X;
     
-    free_memory(screen);
+    hyper_console_free_memory(screen);
     return TRUE;
   }
   
-  free_memory(screen);
+  hyper_console_free_memory(screen);
   return FALSE;
 }
 
@@ -740,6 +743,6 @@ void console_alert(HANDLE hConsoleOutput) {
       console_write_output_attribute(hConsoleOutput, attr, num_read, pos, &num_read);
     }
     
-    free_memory(attr);
+    hyper_console_free_memory(attr);
   }
 }
