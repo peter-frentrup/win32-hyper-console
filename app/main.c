@@ -902,9 +902,9 @@ static void change_color(const wchar_t *arg) {
           fflush(stdout);
           hyper_console_start_link(link);
           hyper_console_set_link_input_text(link);
-          hyper_console_set_link_color((bg << 4) | fg);
+          hyper_console_set_link_color((WORD)((bg << 4) | fg));
           
-          SetConsoleTextAttribute(hStdout, (bg << 4) | fg);
+          SetConsoleTextAttribute(hStdout, (WORD)((bg << 4) | fg));
           printf("%x%x", bg, fg);
           
           fflush(stdout);

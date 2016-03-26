@@ -7,6 +7,38 @@
 		<Option pch_mode="2" />
 		<Option compiler="gnu_gcc_x64_compiler" />
 		<Build>
+			<Target title="x86-gcc-debug">
+				<Option platforms="Windows;" />
+				<Option output="bin/$(TARGET_NAME)/hyper-console" imp_lib="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).a" def_file="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).def" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/$(TARGET_NAME)/" />
+				<Option type="3" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Option createStaticLib="1" />
+				<Compiler>
+					<Add option="-g" />
+					<Add option="-DHYPER_CONSOLE_BUILD_DLL" />
+					<Add directory="include" />
+				</Compiler>
+			</Target>
+			<Target title="x86-gcc-release">
+				<Option platforms="Windows;" />
+				<Option output="bin/$(TARGET_NAME)/hyper-console" imp_lib="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).a" def_file="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).def" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/$(TARGET_NAME)/" />
+				<Option type="3" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Option createStaticLib="1" />
+				<Compiler>
+					<Add option="-O2" />
+					<Add option="-DHYPER_CONSOLE_BUILD_DLL" />
+					<Add option="-DNDEBUG" />
+					<Add directory="include" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+			</Target>
 			<Target title="x64-gcc-debug">
 				<Option platforms="Windows;" />
 				<Option output="bin/$(TARGET_NAME)/hyper-console" imp_lib="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).a" def_file="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).def" prefix_auto="1" extension_auto="1" />
@@ -39,36 +71,43 @@
 					<Add option="-s" />
 				</Linker>
 			</Target>
-			<Target title="x86-gcc-debug">
+			<Target title="x86-msvc-debug">
 				<Option platforms="Windows;" />
 				<Option output="bin/$(TARGET_NAME)/hyper-console" imp_lib="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).a" def_file="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).def" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/$(TARGET_NAME)/" />
 				<Option type="3" />
-				<Option compiler="gcc" />
+				<Option compiler="msvc_2015" />
 				<Option createDefFile="1" />
 				<Option createStaticLib="1" />
 				<Compiler>
-					<Add option="-g" />
-					<Add option="-DHYPER_CONSOLE_BUILD_DLL" />
-					<Add directory="include" />
-				</Compiler>
-			</Target>
-			<Target title="x86-gcc-release">
-				<Option platforms="Windows;" />
-				<Option output="bin/$(TARGET_NAME)/hyper-console" imp_lib="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).a" def_file="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).def" prefix_auto="1" extension_auto="1" />
-				<Option object_output="obj/$(TARGET_NAME)/" />
-				<Option type="3" />
-				<Option compiler="gcc" />
-				<Option createDefFile="1" />
-				<Option createStaticLib="1" />
-				<Compiler>
-					<Add option="-O2" />
-					<Add option="-DHYPER_CONSOLE_BUILD_DLL" />
-					<Add option="-DNDEBUG" />
+					<Add option="/MDd" />
+					<Add option="/Zi" />
+					<Add option="/wd4100 /wd4820 /wd4710 /wd4711" />
+					<Add option="/DHYPER_CONSOLE_BUILD_DLL" />
 					<Add directory="include" />
 				</Compiler>
 				<Linker>
-					<Add option="-s" />
+					<Add option="/debug" />
+				</Linker>
+			</Target>
+			<Target title="x86-msvc-release">
+				<Option platforms="Windows;" />
+				<Option output="bin/$(TARGET_NAME)/hyper-console" imp_lib="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).a" def_file="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).def" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/$(TARGET_NAME)/" />
+				<Option type="3" />
+				<Option compiler="msvc_2015" />
+				<Option createDefFile="1" />
+				<Option createStaticLib="1" />
+				<Compiler>
+					<Add option="/MD" />
+					<Add option="/Ox" />
+					<Add option="/Zi" />
+					<Add option="/wd4100 /wd4820 /wd4710 /wd4711" />
+					<Add option="/DHYPER_CONSOLE_BUILD_DLL" />
+					<Add directory="include" />
+				</Compiler>
+				<Linker>
+					<Add option="/debug" />
 				</Linker>
 			</Target>
 			<Target title="x64-msvc-debug">
@@ -112,57 +151,15 @@
 					<Add option="/debug" />
 				</Linker>
 			</Target>
-			<Target title="x86-msvc-debug">
-				<Option platforms="Windows;" />
-				<Option output="bin/$(TARGET_NAME)/hyper-console" imp_lib="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).a" def_file="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).def" prefix_auto="1" extension_auto="1" />
-				<Option object_output="obj/$(TARGET_NAME)/" />
-				<Option type="3" />
-				<Option compiler="msvc_2015" />
-				<Option createDefFile="1" />
-				<Option createStaticLib="1" />
-				<Compiler>
-					<Add option="/MDd" />
-					<Add option="/Zi" />
-					<Add option="/wd4100 /wd4820 /wd4710 /wd4711" />
-					<Add option="/DHYPER_CONSOLE_BUILD_DLL" />
-					<Add directory="include" />
-				</Compiler>
-				<Linker>
-					<Add option="/debug" />
-				</Linker>
-			</Target>
-			<Target title="x86-msvc-release">
-				<Option platforms="Windows;" />
-				<Option output="bin/$(TARGET_NAME)/hyper-console" imp_lib="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).a" def_file="$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).def" prefix_auto="1" extension_auto="1" />
-				<Option object_output="obj/$(TARGET_NAME)/" />
-				<Option type="3" />
-				<Option compiler="msvc_2015" />
-				<Option createDefFile="1" />
-				<Option createStaticLib="1" />
-				<Compiler>
-					<Add option="/MD" />
-					<Add option="/Ox" />
-					<Add option="/Zi" />
-					<Add option="/wd4100 /wd4820 /wd4710 /wd4711" />
-					<Add option="/DHYPER_CONSOLE_BUILD_DLL" />
-					<Add directory="include" />
-				</Compiler>
-				<Linker>
-					<Add option="/debug" />
-				</Linker>
-			</Target>
 		</Build>
 		<VirtualTargets>
-			<Add alias="All" targets="x64-gcc-debug;x64-gcc-release;x86-gcc-debug;x86-gcc-release;x64-msvc-debug;x64-msvc-release;x86-msvc-debug;x86-msvc-release;" />
+			<Add alias="All" targets="x86-gcc-debug;x86-gcc-release;x64-gcc-debug;x64-gcc-release;x86-msvc-debug;x86-msvc-release;x64-msvc-release;x64-msvc-debug;" />
 		</VirtualTargets>
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
 		<Linker>
-			<Add library="shell32" />
 			<Add library="user32" />
-			<Add library="ole32" />
-			<Add library="uuid" />
 		</Linker>
 		<ExtraCommands>
 			<Add after="cmd /C if not exist ..\app\$(TARGET_OUTPUT_DIR) ( mkdir ..\app\$(TARGET_OUTPUT_DIR) )" />
