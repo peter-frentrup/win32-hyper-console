@@ -23,7 +23,13 @@ HYPER_CONSOLE_API
 void hyper_console_history_free(struct hyper_console_history_t *hist);
 
 
-enum{
+enum {
+  /** Input can span multiple lines.
+  
+      By default, input is read until two consecutive line freeds \\n are read.
+      But that can be changed by providing a `hyper_console_settings_t::need_more_input_predicate`
+      callback.
+   */
   HYPER_CONSOLE_FLAGS_MULTILINE = 1
 };
 
@@ -46,6 +52,24 @@ struct hyper_console_settings_t {
   /** A history buffer or NULL.
    */
   struct hyper_console_history_t *history;
+  
+  /** Optional context argument for callbacks.
+   */
+  void *callback_context;
+  
+  /** Optional end-of-input detection callback.
+      This only really makes sense when \c HYPER_CONSOLE_FLAGS_MULTILINE is given in \c flags.
+      \param context The value provided in \c callback_context.
+      \param buffer  The whole current input buffer.
+      \param len     The input buffer length.
+      \param pos     The current cursor position.
+      \return TRUE if more input lines should be read. FALSE if input is done and 
+              hyper_console_readline() should return.
+      
+      This function is only called when the cursor is in the last line. When the cursor is in a 
+      previous line, a line break will be inserted.
+   */
+  BOOL (*need_more_input_predicate)(void *context, const wchar_t *buffer, int len, int cursor_pos);
 };
 
 /** Read a line of input

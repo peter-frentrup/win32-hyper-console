@@ -67,6 +67,9 @@ struct console_input_t {
   int *output_to_input_positions; // [output_size]
   int output_to_input_capacity;
   
+  void *callback_context;
+  BOOL (*need_more_input_predicate)(void *context, const wchar_t *buffer, int len, int cursor_pos);
+  
   const char *error;
   int dirty_lines;
   
@@ -143,6 +146,20 @@ static BOOL is_console(HANDLE handle) {
   return GetConsoleMode(handle, &mode);
 }
 
+BOOL default_need_more_input_predicate(void *context, const wchar_t *buffer, int len, int cursor_pos) {
+  return FALSE;
+}
+
+BOOL default_multiline_need_more_input_predicate(void *context, const wchar_t *buffer, int len, int cursor_pos) {
+  if(len < 1)
+    return TRUE;
+    
+  if(buffer[len - 1] == '\n')
+    return FALSE;
+    
+  return TRUE;
+}
+
 static BOOL init_console(struct console_input_t *con) {
   assert(con != NULL);
   
@@ -175,6 +192,8 @@ static BOOL init_console(struct console_input_t *con) {
   
   con->input_text[0] = L'\0';
   con->use_position_dependent_coloring = TRUE;
+  
+  con->need_more_input_predicate = default_need_more_input_predicate;
   
   return TRUE;
 }
@@ -937,20 +956,20 @@ static BOOL surround_selection(struct console_input_t *con, const wchar_t *left,
   
   if(left_length > INT_MAX / 2 || right_length > INT_MAX / 2 || left_length + right_length > INT_MAX / 2)
     return FALSE;
-  
+    
   start = MIN(con->input_anchor, con->input_pos);
   end = MAX(con->input_anchor, con->input_pos);
   
   if(!insert_input_text(con, end, right, (int)right_length))
     return FALSE;
     
-  end+= (int)right_length;
+  end += (int)right_length;
   if(!insert_input_text(con, start, left, (int)left_length)) {
     delete_input_text(con, end, 1);
     return FALSE;
   }
   
-  end+= (int)left_length;
+  end += (int)left_length;
   reselect_input(con, end, start);
   return TRUE;
 }
@@ -1111,7 +1130,7 @@ static void copy_to_clipboard(struct console_input_t *con) {
   assert(con != NULL);
   if(con->error)
     return;
-  
+    
   start = MIN(con->input_anchor, con->input_pos);
   end   = MAX(con->input_anchor, con->input_pos);
   if(start == end)
@@ -1157,7 +1176,7 @@ static void navigate_history(struct console_input_t *con, int delta) {
     return;
   }
   
-  con->history_index+= delta;
+  con->history_index += delta;
   
   con->input_anchor = 0;
   con->input_pos = con->input_length;
@@ -1170,29 +1189,52 @@ static void navigate_history(struct console_input_t *con, int delta) {
   update_output(con);
 }
 
+static void handle_key_return(struct console_input_t *con) {
+  int pos, next_nl;
+  assert(con != NULL);
+  
+  next_nl = pos = MAX(con->input_pos, con->input_anchor);
+  while(next_nl < con->input_length && con->input_text[next_nl] != L'\n') {
+    ++next_nl;
+  }
+  
+  if(next_nl == con->input_length) { /* cursor is at last line */
+    if(!con->need_more_input_predicate(con->callback_context, con->input_text, con->input_length, pos)) {
+      con->stop = 1;
+      return;
+    }
+  }
+  
+  delete_selection_no_update(con);
+  insert_input_char(con, con->input_pos, L'\n');
+  update_output(con);
+  
+//  if(con->multiline_mode) {
+//    if(con->input_pos == con->input_length && con->input_pos > 0 && con->input_text[con->input_pos - 1] == L'\n') {
+//      con->stop = 1;
+//      con->input_length -= 1;
+//    }
+//    else {
+//      delete_selection_no_update(con);
+//      insert_input_char(con, con->input_pos, L'\n');
+//      update_output(con);
+//    }
+//  }
+//  else {
+//    con->stop = 1;
+//    con->input_pos = con->input_anchor = con->input_length;
+//    if(scroll_screen_if_needed(con))
+//      update_output(con);
+//    set_output_cursor_position(con);
+//  }
+}
+
 static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er) {
   assert(con != NULL);
   
   switch(er->wVirtualKeyCode) {
     case VK_RETURN:
-      if(con->multiline_mode) {
-        if(con->input_pos == con->input_length && con->input_pos > 0 && con->input_text[con->input_pos - 1] == L'\n') {
-          con->stop = 1;
-          con->input_length -= 1;
-        }
-        else {
-          delete_selection_no_update(con);
-          insert_input_char(con, con->input_pos, L'\n');
-          update_output(con);
-        }
-      }
-      else {
-        con->stop = 1;
-        con->input_pos = con->input_anchor = con->input_length;
-        if(scroll_screen_if_needed(con))
-          update_output(con);
-        set_output_cursor_position(con);
-      }
+      handle_key_return(con);
       return;
       
     case VK_BACK:
@@ -1244,13 +1286,13 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
         navigate_history(con, -1);
       }
       return;
-    
+      
     case VK_DOWN:
       if(!console_scroll_key(con->output_handle, er)) {
         navigate_history(con, +1);
       }
       return;
-    
+      
     case VK_PRIOR:
     case VK_NEXT:
       console_scroll_key(con->output_handle, er);
@@ -1318,7 +1360,7 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
         return;
       }
       break;
-    
+      
     case 'F': // Ctrl+F
       if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
         con->continue_with_search = TRUE;
@@ -1609,7 +1651,7 @@ static BOOL input_loop(struct console_input_t *con) {
       con->error = "ReadConsoleInputW";
       break;
     }
-      
+    
     if(con->continue_with_search) {
       wchar_t *filter;
       BOOL event_eaten;
@@ -1638,7 +1680,7 @@ static BOOL input_loop(struct console_input_t *con) {
         
 //      if(console_handle_search_mode(con->input_handle, con->output_handle, &event, NULL))
 //        continue;
-        
+
       if(console_handle_mark_mode(con->input_handle, con->output_handle, &event, FALSE))
         continue;
     }
@@ -1722,7 +1764,7 @@ static struct console_input_t *get_current_input(void) {
   return current_input_console;
 }
 
-static wchar_t *read_file(FILE *file, BOOL multiline_mode) {
+static wchar_t *read_file(FILE *file, void *callback_context, BOOL (*need_more_input_predicate)(void*, const wchar_t*, int, int)) {
   wchar_t buffer[256];
   
   wchar_t *str = NULL;
@@ -1742,16 +1784,21 @@ static wchar_t *read_file(FILE *file, BOOL multiline_mode) {
     str_len += len;
     
     if(str[str_len - 1] == L'\n') {
-      if(multiline_mode) {
-        if(str_len > 1 && str[str_len - 2] == L'\n') {
-          str[str_len - 2] = L'\0';
-          return str;
-        }
-      }
-      else {
-        str[str_len - 1] = L'\0';
+      str[str_len - 1] = L'\0';
+      if(!need_more_input_predicate(callback_context, str, str_len - 1, str_len - 1))
         return str;
-      }
+        
+      str[str_len - 1] = L'\n';
+//      if(multiline_mode) {
+//        if(str_len > 1 && str[str_len - 2] == L'\n') {
+//          str[str_len - 2] = L'\0';
+//          return str;
+//        }
+//      }
+//      else {
+//        str[str_len - 1] = L'\0';
+//        return str;
+//      }
     }
   }
   
@@ -1767,24 +1814,45 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
   struct console_input_t *old_con;
   
   if(!init_console(con)) {
-    BOOL multiline_mode = FALSE;
-  
+    void *callback_context = NULL;
+    BOOL (*need_more_input_predicate)(void*, const wchar_t*, int, int) = default_need_more_input_predicate;
+    
     if(HAVE_SETTINGS(settings, flags)) {
-      multiline_mode = (settings->flags & HYPER_CONSOLE_FLAGS_MULTILINE) != 0;
+      if((settings->flags & HYPER_CONSOLE_FLAGS_MULTILINE) != 0)
+        need_more_input_predicate = default_multiline_need_more_input_predicate;
+    }
+    
+    if(HAVE_SETTINGS(settings, callback_context)) {
+      callback_context = settings->callback_context;
+    }
+    
+    if(HAVE_SETTINGS(settings, need_more_input_predicate) && settings->need_more_input_predicate) {
+      need_more_input_predicate = settings->need_more_input_predicate;
     }
     
     /* settings->default_input is ignored */
     fflush(stdout);
-    return read_file(stdin, multiline_mode);
+    return read_file(stdin, callback_context, need_more_input_predicate);
   }
   
   if(HAVE_SETTINGS(settings, flags)) {
-    con->multiline_mode = (settings->flags & HYPER_CONSOLE_FLAGS_MULTILINE) != 0;
+    if((settings->flags & HYPER_CONSOLE_FLAGS_MULTILINE) != 0) {
+      con->multiline_mode = TRUE;
+      con->need_more_input_predicate = default_multiline_need_more_input_predicate;
+    }
   }
   
   if(HAVE_SETTINGS(settings, history)) {
     con->history = settings->history;
     con->history_index = console_history_count(con->history);
+  }
+  
+  if(HAVE_SETTINGS(settings, callback_context)) {
+    con->callback_context = settings->callback_context;
+  }
+  
+  if(HAVE_SETTINGS(settings, need_more_input_predicate) && settings->need_more_input_predicate) {
+    con->need_more_input_predicate = settings->need_more_input_predicate;
   }
   
   init_buffer(con);
@@ -1815,6 +1883,14 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
   if(!con->ignore_input_when_stopped) {
     wchar_t *result = con->input_text;
     console_history_add(con->history, con->input_text, con->input_length);
+    
+    if( con->need_more_input_predicate == default_multiline_need_more_input_predicate && 
+        con->input_length > 0 &&
+        result[con->input_length - 1] == L'\n')
+    {
+      /* when HYPER_CONSOLE_FLAGS_MULTILINE was given, trim last line break */
+      result[con->input_length - 1] = L'\0';
+    }
     
     con->input_text = NULL;
     con->input_capacity = 0;

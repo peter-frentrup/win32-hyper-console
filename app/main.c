@@ -1064,6 +1064,22 @@ static void handle_sigint(int sig) {
   InterlockedExchange(&interrupted, TRUE);
 }
 
+static BOOL need_more_input_predicate(void *context, const wchar_t *buffer, int len, int cursor_pos) {
+  int k = 0;
+  while(len-- > 0) {
+    switch(*buffer++) {
+      case L'(':
+        ++k;
+        break;
+      case L')':
+        --k;
+        break;
+    }
+  }
+  
+  return k != 0;
+}
+
 int main() {
   wchar_t *str = NULL;
   struct hyper_console_settings_t settings;
@@ -1072,6 +1088,7 @@ int main() {
   settings.size = sizeof(settings);
   settings.default_input = L"help";
   settings.history = hyper_console_history_new(0);
+  settings.need_more_input_predicate = need_more_input_predicate;
   
   signal(SIGINT, handle_sigint);
   
