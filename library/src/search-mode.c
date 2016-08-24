@@ -150,7 +150,7 @@ static struct match_t *find_all_within(struct console_search_t *cs, int start, i
   
   while(start < end) {
     if(is_match_at_index(cs, start)) {
-      struct match_t *new_match = (struct match_t*)allocate_memory(sizeof(struct match_t));
+      struct match_t *new_match = (struct match_t*)hyper_console_allocate_memory(sizeof(struct match_t));
       
       if(new_match) {
         if(result) {
@@ -776,7 +776,7 @@ static BOOL start_search_mode(struct console_search_t *cs) {
     length = csbi.dwSize.X * csbi.dwSize.Y;
     
     hyper_console_free_memory(cs->screen);
-    cs->screen = allocate_memory(length * sizeof(wchar_t));
+    cs->screen = hyper_console_allocate_memory(length * sizeof(wchar_t));
     if( !cs->screen || 
         !console_read_output_character(cs->output_handle, cs->screen, length, pos, &read) ||
         read != length) 
@@ -788,7 +788,7 @@ static BOOL start_search_mode(struct console_search_t *cs) {
     
     read = 0;
     hyper_console_free_memory(cs->attributes);
-    cs->attributes = allocate_memory(length * sizeof(WORD));
+    cs->attributes = hyper_console_allocate_memory(length * sizeof(WORD));
     if( !cs->attributes || 
         !console_read_output_attribute(cs->output_handle, cs->attributes, length, pos, &read) ||
         read != length) 
@@ -805,7 +805,7 @@ static BOOL start_search_mode(struct console_search_t *cs) {
   }
   
   if(cs->oritinal_title == NULL) {
-    cs->oritinal_title = allocate_memory(sizeof(wchar_t) * 256);
+    cs->oritinal_title = hyper_console_allocate_memory(sizeof(wchar_t) * 256);
     if(cs->oritinal_title) {
       GetConsoleTitleW(cs->oritinal_title, 256);
     }

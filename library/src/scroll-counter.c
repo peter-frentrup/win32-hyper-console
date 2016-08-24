@@ -80,7 +80,7 @@ static struct text_line_t *create_text_line(int length) {
   assert(length >= 0);
   
   size = sizeof(wchar_t) * (size_t)length + sizeof(struct text_line_t);
-  result = allocate_memory(size);
+  result = hyper_console_allocate_memory(size);
   if(!result)
     return NULL;
     
@@ -393,7 +393,7 @@ static void append_new_known_lines(struct console_scrollback_t *cs, const wchar_
 struct console_scrollback_t *console_scrollback_new(void) {
   struct console_scrollback_t *cs;
   
-  cs = allocate_memory(sizeof(struct console_scrollback_t));
+  cs = hyper_console_allocate_memory(sizeof(struct console_scrollback_t));
   if(cs) {
     memset(cs, 0, sizeof(*cs));
     cs->output_handle = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -438,7 +438,7 @@ void console_scrollback_update(struct console_scrollback_t *cs, int known_visibl
   }
   
   
-  visible_lines = allocate_memory(visible_size.X * visible_size.Y * sizeof(wchar_t));
+  visible_lines = hyper_console_allocate_memory(visible_size.X * visible_size.Y * sizeof(wchar_t));
   if(visible_lines != NULL) {
     DWORD num_read;
     COORD pos;

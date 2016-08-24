@@ -26,7 +26,7 @@ BOOL resize_array(void **arr, int *capacity, int item_size, int newsize);
 
 /** Allocate a block of memory.
  */
-void *allocate_memory(size_t size);
+void *hyper_console_allocate_memory(size_t size);
 
 
 #endif // __CONSOLE__MEMORY_UTIL_H__

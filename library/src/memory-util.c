@@ -38,7 +38,8 @@ BOOL resize_array(void **arr, int *capacity, int item_size, int newsize) {
   return TRUE;
 }
 
-void *allocate_memory(size_t size) {
+HYPER_CONSOLE_API
+void *hyper_console_allocate_memory(size_t size) {
   return malloc(size);
 }
 

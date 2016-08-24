@@ -59,10 +59,10 @@ struct hyper_console_settings_t {
   
   /** Optional end-of-input detection callback.
       This only really makes sense when \c HYPER_CONSOLE_FLAGS_MULTILINE is given in \c flags.
-      \param context The value provided in \c callback_context.
-      \param buffer  The whole current input buffer.
-      \param len     The input buffer length.
-      \param pos     The current cursor position.
+      \param context     The value provided in \c callback_context.
+      \param buffer      The whole current input buffer.
+      \param len         The input buffer length.
+      \param cursor_pos  The current cursor position.
       \return TRUE if more input lines should be read. FALSE if input is done and 
               hyper_console_readline() should return.
       
@@ -70,6 +70,23 @@ struct hyper_console_settings_t {
       previous line, a line break will be inserted.
    */
   BOOL (*need_more_input_predicate)(void *context, const wchar_t *buffer, int len, int cursor_pos);
+  
+  /** Optional auto-completion callback.
+      This is called when the user presses TAB to get all possible completions
+      \param context           The value provided in \c callback_context.
+      \param buffer            The whole current input buffer.
+      \param len               The input buffer length.
+      \param cursor_pos        The current cursor position.
+      \param completion_start  To be set to the start position of the text to be replaced/completed.
+      \param completion_start  To be set to the end position of the text to be replaced/completed.
+      \return A NULL-terminated array of NUL-terminated strings. 
+      
+      The returned array and each string inside has to be allocated with hyper_console_allocate_memory()
+      and will be freed by the caller.
+      
+      The function may also return NULL for an empty array.
+   */
+  wchar_t **(*auto_completion)(void *context, const wchar_t *buffer, int len, int cursor_pos, int *completion_start, int *completion_end);
 };
 
 /** Read a line of input
@@ -82,6 +99,10 @@ HYPER_CONSOLE_API
 wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings);
 
 
+/** Allocate a block of memory.
+ */
+HYPER_CONSOLE_API
+void *hyper_console_allocate_memory(size_t size);
 
 /** Release a block of memory.
  */

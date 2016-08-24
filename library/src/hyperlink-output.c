@@ -233,7 +233,7 @@ static struct hyperlink_t *open_new_link(struct hyperlink_collection_t *hc) {
   clean_old_links(hc, top_line);
   debug_printf(L"open new link at %d:%d (top = %d:%d)\n", line, column, top_line, top_column);
   
-  link = allocate_memory(sizeof(struct hyperlink_t));
+  link = hyper_console_allocate_memory(sizeof(struct hyperlink_t));
   if(!link) {
     hc->num_failed_open_links++;
     return NULL;
@@ -311,7 +311,7 @@ static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t
   
   hyper_console_free_memory(link->title);
   if(title) {
-    link->title = allocate_memory((title_length + 1) * sizeof(wchar_t));
+    link->title = hyper_console_allocate_memory((title_length + 1) * sizeof(wchar_t));
     if(link->title) {
       memcpy(
           link->title,
@@ -349,7 +349,7 @@ static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wc
   
   hyper_console_free_memory(link->input_text);
   if(text) {
-    link->input_text = allocate_memory((text_length + 1) * sizeof(wchar_t));
+    link->input_text = hyper_console_allocate_memory((text_length + 1) * sizeof(wchar_t));
     if(link->input_text) {
       memcpy(
           link->input_text,
@@ -497,7 +497,7 @@ static BOOL invert_link_colors(struct hyperlink_collection_t *hc, const struct h
   if(length <= 0)
     return FALSE;
     
-  attributes = allocate_memory(length * sizeof(WORD));
+  attributes = hyper_console_allocate_memory(length * sizeof(WORD));
   if(attributes == NULL)
     return FALSE;
     
@@ -534,14 +534,14 @@ static BOOL activate_link(struct hyperlink_collection_t *hc, struct hyperlink_t 
   link->inactive_attribute_count = 0;
   hyper_console_free_memory(link->inactive_attributes);
   
-  link->inactive_attributes = allocate_memory(length * sizeof(WORD));
+  link->inactive_attributes = hyper_console_allocate_memory(length * sizeof(WORD));
   if(link->inactive_attributes == NULL)
     return TRUE;
     
   if(console_read_output_attribute(hc->output_handle, link->inactive_attributes, length, start, &num_valid)) {
     link->inactive_attribute_count = length;
     
-    new_attributes = allocate_memory(length * sizeof(WORD));
+    new_attributes = hyper_console_allocate_memory(length * sizeof(WORD));
     if(new_attributes != NULL) {
       int i;
       for(i = 0; i < length; ++i)

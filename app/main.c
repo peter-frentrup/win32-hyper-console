@@ -1080,6 +1080,63 @@ static BOOL need_more_input_predicate(void *context, const wchar_t *buffer, int 
   return k != 0;
 }
 
+static wchar_t **auto_completion(void *context, const wchar_t *buffer, int len, int cursor_pos, int *completion_start, int *completion_end) {
+  static const wchar_t *all_words[] = { 
+    L"bottom", 
+    L"cd", 
+    L"cd+dir", 
+    L"cls", 
+    L"color", 
+    L"dir", 
+    L"drives", 
+    L"help", 
+    L"lorem", 
+    L"multi", 
+    L"open", 
+    L"quit", 
+    L"run", 
+    L"single", 
+    L"tree" };
+  const size_t num_words = sizeof(all_words) / sizeof(all_words[0]);
+  
+  int word_start = cursor_pos;
+  int word_end = cursor_pos;
+  wchar_t **results;
+  wchar_t **next;
+  int i;
+
+  while(word_start > 0 && buffer[word_start - 1] > L' ')
+    --word_start;
+    
+  while(word_end < len && buffer[word_end] > L' ')
+    ++word_end;
+  
+  *completion_start = word_start;
+  *completion_end = word_end;
+  
+  results = hyper_console_allocate_memory(sizeof(wchar_t*) * (num_words + 1));
+  if(!results)
+    return NULL;
+  
+  next = results;
+  for(i = 0; i < num_words; ++i) {
+    size_t word_len = wcslen(all_words[i]);
+    if(word_len < cursor_pos - word_start)
+      continue;
+      
+    if(0 == memcmp(all_words[i], buffer + word_start, (cursor_pos - word_start) * sizeof(wchar_t))) {
+      *next = hyper_console_allocate_memory(sizeof(wchar_t) * (word_len + 1));
+      if(*next) {
+        memcpy(*next, all_words[i], sizeof(wchar_t) * (word_len + 1));
+        ++next;
+      }
+    }
+  }
+  
+  *next = NULL;
+  return results;
+}
+
 int main() {
   wchar_t *str = NULL;
   struct hyper_console_settings_t settings;
@@ -1089,6 +1146,7 @@ int main() {
   settings.default_input = L"help";
   settings.history = hyper_console_history_new(0);
   settings.need_more_input_predicate = need_more_input_predicate;
+  settings.auto_completion = auto_completion;
   
   signal(SIGINT, handle_sigint);
   

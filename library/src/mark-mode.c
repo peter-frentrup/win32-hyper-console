@@ -295,7 +295,7 @@ static wchar_t *get_selection_lines(struct console_mark_t *cm, int *total_length
   }
   
   max_length = length + 2 * (end.Y - start.Y + 1) + 1;
-  str = allocate_memory(sizeof(wchar_t) * max_length);
+  str = hyper_console_allocate_memory(sizeof(wchar_t) * max_length);
   if(!str) {
     total_length = 0;
     return NULL;
@@ -345,7 +345,7 @@ static wchar_t *get_selection_block_lines(struct console_mark_t *cm, int *total_
   line_length = end.X - start.X + 1;
   
   length = (end.Y - start.Y + 1) * (line_length + 2);
-  str = allocate_memory(sizeof(wchar_t) * length);
+  str = hyper_console_allocate_memory(sizeof(wchar_t) * length);
   if(!str) {
     *total_length = 0;
     return NULL;
@@ -435,7 +435,7 @@ static void start_mark_mode(struct console_mark_t *cm) {
   }
   
   if(cm->oritinal_title == NULL) {
-    cm->oritinal_title = allocate_memory(sizeof(wchar_t) * 256);
+    cm->oritinal_title = hyper_console_allocate_memory(sizeof(wchar_t) * 256);
     if(cm->oritinal_title) {
       wchar_t buffer[256 + 20];
       

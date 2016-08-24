@@ -22,7 +22,7 @@ HYPER_CONSOLE_API
 struct hyper_console_history_t *hyper_console_history_new(int options) {
   struct hyper_console_history_t *hist;
   
-  hist = allocate_memory(sizeof(struct hyper_console_history_t));
+  hist = hyper_console_allocate_memory(sizeof(struct hyper_console_history_t));
   if(!hist)
     return NULL;
   
@@ -119,7 +119,7 @@ void console_history_add(struct hyper_console_history_t *hist, const wchar_t *te
     return;
   }
   
-  line = allocate_memory(sizeof(struct history_line_t) + text_length * sizeof(wchar_t));
+  line = hyper_console_allocate_memory(sizeof(struct history_line_t) + text_length * sizeof(wchar_t));
   if(line == NULL)
     return;
   

@@ -13,9 +13,9 @@ This library implements advanced Win32 console input with mouse and clipboard su
 * Clickable links anywhere in the output (can be clicked during `hyper_console_readline()`)
 * surround selection with (...), [...], "..." when one of the delimiters is entered.
 * Input history
+* customizable auto-completion with Tab/Shift+Tab/Esc
 
 ### Goals/TODO ###
 
-* (customizable) auto-completion with Tab/Shift+Tab/Esc
 * Expand/shrink selection with Ctrl+./Ctrl+Shift+.
 * (customizable) syntax highlighting

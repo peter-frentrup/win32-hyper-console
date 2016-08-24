@@ -413,7 +413,7 @@ void console_clean_lines(HANDLE hConsoleOutput, int num_lines) {
   if(num_lines > csbi.dwSize.Y)
     num_lines = csbi.dwSize.Y;
     
-  line_chars = allocate_memory(sizeof(wchar_t) * csbi.dwSize.X);
+  line_chars = hyper_console_allocate_memory(sizeof(wchar_t) * csbi.dwSize.X);
   if(!line_chars)
     return;
     
@@ -685,7 +685,7 @@ BOOL console_get_screen_word_start_end(HANDLE hConsoleOutput, COORD pos, COORD *
     length += csbi.dwSize.X;
   }
   
-  screen = allocate_memory(sizeof(wchar_t) * length);
+  screen = hyper_console_allocate_memory(sizeof(wchar_t) * length);
   if(!screen)
     return FALSE;
     
@@ -726,7 +726,7 @@ void console_alert(HANDLE hConsoleOutput) {
   if(GetConsoleScreenBufferInfo(hConsoleOutput, &csbi)) {
     COORD pos;
     DWORD num_read;
-    WORD *attr = allocate_memory(csbi.dwSize.X * csbi.dwSize.Y * sizeof(WORD));
+    WORD *attr = hyper_console_allocate_memory(csbi.dwSize.X * csbi.dwSize.Y * sizeof(WORD));
     
     pos.X = pos.Y = 0;
     

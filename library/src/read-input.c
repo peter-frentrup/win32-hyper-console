@@ -40,6 +40,7 @@ struct console_input_t {
   WORD attr_default;
   WORD attr_fences;
   WORD attr_missing_fence;
+  WORD attr_completion;
   int input_line_coord_y;
   
   wchar_t *input_text; // [input_length + 1]
@@ -69,6 +70,13 @@ struct console_input_t {
   
   void *callback_context;
   BOOL (*need_more_input_predicate)(void *context, const wchar_t *buffer, int len, int cursor_pos);
+  wchar_t **(*auto_completion)(void *context, const wchar_t *buffer, int len, int cursor_pos, int *completion_start, int *completion_end);
+  
+  int completion_pos;
+  int completion_end;
+  wchar_t **completions;
+  int completions_count;
+  int completion_index;
   
   const char *error;
   int dirty_lines;
@@ -80,6 +88,7 @@ struct console_input_t {
   unsigned ignore_input_when_stopped: 1;
   unsigned redo_in_mark_mode: 1;
   unsigned continue_with_search: 1;
+  unsigned retain_completions: 1;
 };
 
 static BOOL is_console(HANDLE handle);
@@ -97,6 +106,7 @@ static BOOL resize_output_buffer(struct console_input_t *con, int size);
 static BOOL fill_output_buffer(struct console_input_t *con);
 static BOOL expand_glyphs(struct console_input_t *con);
 static BOOL colorize_matching_fences(struct console_input_t *con);
+static void highlight_completion(struct console_input_t *con);
 static void highlight_selection(struct console_input_t *con);
 static BOOL extend_output_buffer_to_full_lines(struct console_input_t *con);
 static BOOL scroll_screen_if_needed(struct console_input_t *con);
@@ -146,11 +156,11 @@ static BOOL is_console(HANDLE handle) {
   return GetConsoleMode(handle, &mode);
 }
 
-BOOL default_need_more_input_predicate(void *context, const wchar_t *buffer, int len, int cursor_pos) {
+static BOOL default_need_more_input_predicate(void *context, const wchar_t *buffer, int len, int cursor_pos) {
   return FALSE;
 }
 
-BOOL default_multiline_need_more_input_predicate(void *context, const wchar_t *buffer, int len, int cursor_pos) {
+static BOOL default_multiline_need_more_input_predicate(void *context, const wchar_t *buffer, int len, int cursor_pos) {
   if(len < 1)
     return TRUE;
     
@@ -159,6 +169,13 @@ BOOL default_multiline_need_more_input_predicate(void *context, const wchar_t *b
     
   return TRUE;
 }
+
+static wchar_t **default_auto_completion(void *context, const wchar_t *buffer, int len, int cursor_pos, int *completion_start, int *completion_end) {
+  *completion_start = 0;
+  *completion_end = len;
+  return NULL;
+}
+
 
 static BOOL init_console(struct console_input_t *con) {
   assert(con != NULL);
@@ -183,10 +200,10 @@ static BOOL init_console(struct console_input_t *con) {
   }
   
   con->input_capacity = 256;
-  con->input_text = allocate_memory(sizeof(wchar_t) * con->input_capacity);
+  con->input_text = hyper_console_allocate_memory(sizeof(wchar_t) * con->input_capacity);
   if(!con->input_text) {
     con->input_capacity = 0;
-    con->error = "allocate_memory";
+    con->error = "hyper_console_allocate_memory";
     return FALSE;
   }
   
@@ -194,6 +211,7 @@ static BOOL init_console(struct console_input_t *con) {
   con->use_position_dependent_coloring = TRUE;
   
   con->need_more_input_predicate = default_need_more_input_predicate;
+  con->auto_completion = default_auto_completion;
   
   return TRUE;
 }
@@ -231,8 +249,9 @@ static void init_colors(struct console_input_t *con) {
   if(con->error)
     return;
     
-  con->attr_fences = con->attr_default;
+  con->attr_fences        = con->attr_default;
   con->attr_missing_fence = con->attr_default;
+  con->attr_completion    = con->attr_default;
   
   // light gray on black
   if((con->attr_default & 0xFF) == (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE)) {
@@ -248,6 +267,8 @@ static void init_colors(struct console_input_t *con) {
   // white on light red
   con->attr_missing_fence = BACKGROUND_RED | BACKGROUND_INTENSITY | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY;
   
+  // white on dark blue
+  con->attr_completion = BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY;
 }
 
 static BOOL read_prompt(struct console_input_t *con, int length) {
@@ -266,7 +287,7 @@ static BOOL read_prompt(struct console_input_t *con, int length) {
     
     if(length > 0) {
       con->prompt_size = length;
-      con->prompt = allocate_memory(sizeof(con->prompt[0]) * con->prompt_size);
+      con->prompt = hyper_console_allocate_memory(sizeof(con->prompt[0]) * con->prompt_size);
     }
   }
   
@@ -275,7 +296,7 @@ static BOOL read_prompt(struct console_input_t *con, int length) {
     
   if(!con->prompt) {
     con->prompt_size = 0;
-    con->error = "allocate_memory";
+    con->error = "hyper_console_allocate_memory";
     return FALSE;
   }
   
@@ -298,6 +319,25 @@ static BOOL read_prompt(struct console_input_t *con, int length) {
   return TRUE;
 }
 
+static void forget_completions(struct console_input_t *con) {
+  wchar_t **compl;
+  int i;
+  
+  assert(con != NULL);
+  
+  compl = con->completions;
+  for(i = 0; i < con->completions_count; ++i)
+    hyper_console_free_memory(compl[i]);
+  
+  hyper_console_free_memory(con->completions);
+  
+  con->completions = NULL;
+  con->completion_pos = 0;
+  con->completion_end = 0;
+  con->completions_count = 0;
+  con->completion_index = 0;
+}
+
 static void free_console(struct console_input_t *con) {
   assert(con != NULL);
   
@@ -306,6 +346,7 @@ static void free_console(struct console_input_t *con) {
   hyper_console_free_memory(con->output_buffer);
   hyper_console_free_memory(con->input_to_output_positions);
   hyper_console_free_memory(con->output_to_input_positions);
+  forget_completions(con);
   memset(con, 0, sizeof(struct console_input_t));
 }
 
@@ -575,6 +616,24 @@ static BOOL colorize_matching_fences(struct console_input_t *con) {
   return FALSE;
 }
 
+static void highlight_completion(struct console_input_t *con) {
+  assert(con != NULL);
+  if(con->error)
+    return;
+    
+  if(con->completions_count > 0) {
+    int s = get_output_position_from_input_position(con, con->completion_pos);
+    int e = get_output_position_from_input_position(con, con->completion_end);
+    
+    for(; s < e; ++s) {
+      WORD attr = con->output_buffer[s].Attributes;
+      WORD rest = attr & 0xFF00;
+      
+      con->output_buffer[s].Attributes = rest | con->attr_completion;
+    }
+  }
+}
+
 static void highlight_selection(struct console_input_t *con) {
   int s;
   int e;
@@ -720,7 +779,7 @@ static BOOL write_output_buffer_lines(struct console_input_t *con) {
   
   lines = con->output_size / console_width;
   if(lines < con->dirty_lines) {
-    CHAR_INFO *empty = allocate_memory((con->dirty_lines - lines) * console_width * sizeof(CHAR_INFO));
+    CHAR_INFO *empty = hyper_console_allocate_memory((con->dirty_lines - lines) * console_width * sizeof(CHAR_INFO));
     if(empty) {
       int i;
       
@@ -801,6 +860,7 @@ static BOOL set_output_cursor_position(struct console_input_t *con) {
 static BOOL update_output(struct console_input_t *con) {
   fill_output_buffer(con);
   colorize_matching_fences(con);
+  highlight_completion(con);
   highlight_selection(con);
   expand_glyphs(con);
   extend_output_buffer_to_full_lines(con);
@@ -907,6 +967,10 @@ static BOOL insert_input_text(struct console_input_t *con, int pos, const wchar_
   assert(pos >= 0);
   assert(pos <= con->input_length);
   
+  if(!con->retain_completions) {
+    forget_completions(con);
+  }
+  
   if(length < 0) {
     length = (int)wcslen(str);
     
@@ -984,6 +1048,10 @@ static BOOL delete_input_text(struct console_input_t *con, int pos, int length) 
   assert(length >= 0);
   assert(length <= con->input_length - pos);
   
+  if(!con->retain_completions) {
+    forget_completions(con);
+  }
+  
   memmove(
     con->input_text + pos,
     con->input_text + pos + length,
@@ -1012,7 +1080,7 @@ static void reselect_input(struct console_input_t *con, int new_pos, int new_anc
   assert(con != NULL);
   if(con->error)
     return;
-    
+  
   if(new_pos < 0)
     new_pos = 0;
     
@@ -1026,6 +1094,13 @@ static void reselect_input(struct console_input_t *con, int new_pos, int new_anc
     new_anchor = con->input_length;
     
   need_redraw = (con->input_pos != con->input_anchor) || (new_pos != new_anchor) || con->have_colored_fences;
+  
+  if(!con->retain_completions) {
+    if(con->completions)
+      need_redraw = TRUE;
+      
+    forget_completions(con);
+  }
   
   con->input_pos = new_pos;
   con->input_anchor = new_anchor;
@@ -1229,6 +1304,82 @@ static void handle_key_return(struct console_input_t *con) {
 //  }
 }
 
+static void handle_completion(struct console_input_t *con, BOOL forward) {
+  assert(con != NULL);
+  
+  con->retain_completions = TRUE;
+  if(con->completions_count == 0) {
+    int start = 0;
+    int end = con->input_length;
+    wchar_t **results;
+    
+    assert(con->completions == NULL);
+    
+    results = con->auto_completion(
+      con->callback_context, 
+      con->input_text, 
+      con->input_length,
+      MIN(con->input_pos, con->input_anchor),
+      &start,
+      &end);
+    
+    if(results) {
+      con->completions = results;
+      con->completions_count = 0;
+      
+      if(start < 0 || end > con->input_length || end < start) {
+        forget_completions(con);
+        con->retain_completions = FALSE;
+        return;
+      }
+      
+      con->completion_pos = start;
+      con->completion_end = end;
+      while(*results) {
+        con->completions_count++;
+        ++results;
+      }
+      
+      wchar_t *orig = hyper_console_allocate_memory((end - start + 1) * sizeof(wchar_t));
+      if(!orig) {
+        forget_completions(con);
+        con->retain_completions = FALSE;
+        return;
+      }
+      
+      memcpy(orig, con->input_text + start, (end - start) * sizeof(wchar_t));
+      orig[end - start] = L'\0';
+      *results = orig;
+      con->completions_count++;
+      
+      if(forward)
+        con->completion_index = -1;
+      else
+        con->completion_index = con->completions_count - 1;
+    }
+  }
+  
+  if(con->completions_count > 0) {
+    if(forward)
+      con->completion_index++;
+    else
+      con->completion_index--;
+    
+    if(con->completion_index < 0)
+      con->completion_index = con->completions_count - 1;
+    else if(con->completion_index >= con->completions_count)
+      con->completion_index = 0;
+    
+    reselect_input(con, con->completion_pos, con->completion_end);
+    delete_selection_no_update(con);
+    insert_input_text(con, con->completion_pos, con->completions[con->completion_index], -1);
+    con->completion_end = con->input_pos;
+    update_output(con);
+  }
+  
+  con->retain_completions = FALSE;
+}
+
 static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er) {
   assert(con != NULL);
   
@@ -1299,11 +1450,19 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
       return;
       
     case VK_ESCAPE:
-      con->input_anchor = 0;
-      con->input_pos = con->input_length;
-      con->history_index = console_history_count(con->history);
-      delete_selection_no_update(con);
-      update_output(con);
+      if(con->completions_count > 0) {
+        con->completion_index = 0;
+        handle_completion(con, FALSE);
+        forget_completions(con);
+        update_output(con);
+      }
+      else {
+        con->input_anchor = 0;
+        con->input_pos = con->input_length;
+        con->history_index = console_history_count(con->history);
+        delete_selection_no_update(con);
+        update_output(con);
+      }
       return;
       
     case 'A': // Ctrl+A
@@ -1369,9 +1528,10 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
       break;
       
     case VK_TAB:
-      delete_selection_no_update(con);
-      insert_input_char(con, con->input_pos, L'\t');
-      update_output(con);
+//      delete_selection_no_update(con);
+//      insert_input_char(con, con->input_pos, L'\t');
+//      update_output(con);
+      handle_completion(con, !(er->dwControlKeyState & (SHIFT_PRESSED)));
       return;
   }
   
@@ -1615,6 +1775,8 @@ static void finish_input(struct console_input_t *con) {
   if(con->error)
     return;
     
+  forget_completions(con);
+  
   con->input_text[con->input_length] = L'\0';
   con->input_pos = con->input_anchor = con->input_length;
   con->use_position_dependent_coloring = FALSE;
@@ -1661,7 +1823,7 @@ static BOOL input_loop(struct console_input_t *con) {
       
       con->continue_with_search = FALSE;
       
-      filter = allocate_memory((length + 1) * sizeof(wchar_t));
+      filter = hyper_console_allocate_memory((length + 1) * sizeof(wchar_t));
       if(filter) {
         memcpy(filter, con->input_text + start, length * sizeof(wchar_t));
         filter[length] = L'\0';
@@ -1853,6 +2015,10 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
   
   if(HAVE_SETTINGS(settings, need_more_input_predicate) && settings->need_more_input_predicate) {
     con->need_more_input_predicate = settings->need_more_input_predicate;
+  }
+  
+  if(HAVE_SETTINGS(settings, auto_completion) && settings->auto_completion) {
+    con->auto_completion = settings->auto_completion;
   }
   
   init_buffer(con);
