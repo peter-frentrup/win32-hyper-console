@@ -1019,6 +1019,7 @@ static BOOL insert_input_text(struct console_input_t *con, int pos, const wchar_
   assert(pos >= 0);
   assert(pos <= con->input_length);
   
+  con->preferred_column = -1;
   if(!con->retain_completions) {
     forget_completions(con);
   }
@@ -1100,6 +1101,7 @@ static BOOL delete_input_text(struct console_input_t *con, int pos, int length) 
   assert(length >= 0);
   assert(length <= con->input_length - pos);
   
+  con->preferred_column = -1;
   if(!con->retain_completions) {
     forget_completions(con);
   }
@@ -1148,7 +1150,6 @@ static void reselect_input(struct console_input_t *con, int new_pos, int new_anc
   need_redraw = (con->input_pos != con->input_anchor) || (new_pos != new_anchor) || con->have_colored_fences;
   
   con->preferred_column = -1;
-  
   if(!con->retain_completions) {
     if(con->completions)
       need_redraw = TRUE;
