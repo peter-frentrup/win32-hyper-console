@@ -1660,7 +1660,12 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
       break;
       
     case VK_TAB:
-      if(!try_indent(con, !(er->dwControlKeyState & (SHIFT_PRESSED))))
+      if(er->dwControlKeyState & LITERAL_KEY_STATE) {
+        delete_selection_no_update(con);
+        insert_input_char(con, con->input_pos, er->uChar.UnicodeChar);
+        update_output(con);
+      }
+      else if(!try_indent(con, !(er->dwControlKeyState & (SHIFT_PRESSED))))
         handle_completion(con, !(er->dwControlKeyState & (SHIFT_PRESSED)));
       return;
   }

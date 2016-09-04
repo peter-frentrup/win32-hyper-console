@@ -25,7 +25,7 @@ struct send_input_t {
 };
 
 static BOOL flush_input(struct send_input_t *context);
-static BOOL send_input(struct send_input_t *context, wchar_t ch);
+static BOOL send_input(struct send_input_t *context, wchar_t ch, DWORD control_key_state);
 
 
 BOOL console_read_output_character(
@@ -557,7 +557,7 @@ static BOOL flush_input(struct send_input_t *context) {
   return TRUE;
 }
 
-static BOOL send_input(struct send_input_t *context, wchar_t ch) {
+static BOOL send_input(struct send_input_t *context, wchar_t ch, DWORD control_key_state) {
   SHORT vk_mode;
   
   assert(context != NULL);
@@ -585,7 +585,7 @@ static BOOL send_input(struct send_input_t *context, wchar_t ch) {
   
   context->input_records[context->counter].EventType = KEY_EVENT;
   context->input_records[context->counter].Event.KeyEvent.bKeyDown = TRUE;
-  context->input_records[context->counter].Event.KeyEvent.dwControlKeyState = 0;// (shift ? SHIFT_PRESSED : 0) | (ctrl ? LEFT_CTRL_PRESSED : 0) | (alt ? LEFT_ALT_PRESSED : 0);
+  context->input_records[context->counter].Event.KeyEvent.dwControlKeyState = control_key_state;// (shift ? SHIFT_PRESSED : 0) | (ctrl ? LEFT_CTRL_PRESSED : 0) | (alt ? LEFT_ALT_PRESSED : 0);
   context->input_records[context->counter].Event.KeyEvent.uChar.UnicodeChar = ch;
   context->input_records[context->counter].Event.KeyEvent.wRepeatCount = 1;
   context->input_records[context->counter].Event.KeyEvent.wVirtualKeyCode = LOBYTE(vk_mode);
@@ -622,25 +622,26 @@ void console_paste_from_clipboard(HANDLE hConsoleInput) {
         wchar_t ch = *copy_data;
         
         if(ch == L'\r' && copy_data[1] == L'\n') {
-          send_input(context, L'\r');
+          send_input(context, L'\r', 0);
           ++copy_data;
           continue;
         }
         
         if(ch == L'\n') {
-          send_input(context, L'\r');
+          send_input(context, L'\r', 0);
           continue;
         }
         
         if(ch == L'\t') {
-          send_input(context, L' ');
-          send_input(context, L' ');
-          send_input(context, L' ');
-          send_input(context, L' ');
+          send_input(context, L'\t', LITERAL_KEY_STATE);
+//          send_input(context, L' ', 0);
+//          send_input(context, L' ', 0);
+//          send_input(context, L' ', 0);
+//          send_input(context, L' ', 0);
           continue;
         }
         
-        send_input(context, ch);
+        send_input(context, ch, 0);
       }
       
       flush_input(context);

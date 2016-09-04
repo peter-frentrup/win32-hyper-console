@@ -3,6 +3,8 @@
 
 #include <windows.h>
 
+#define LITERAL_KEY_STATE  0x10000
+
 BOOL console_read_output_character(
     HANDLE hConsoleOutput,
     LPWSTR lpCharacter,
