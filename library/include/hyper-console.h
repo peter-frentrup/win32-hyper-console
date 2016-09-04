@@ -87,6 +87,10 @@ struct hyper_console_settings_t {
       The function may also return NULL for an empty array.
    */
   wchar_t **(*auto_completion)(void *context, const wchar_t *buffer, int len, int cursor_pos, int *completion_start, int *completion_end);
+  
+  /** Optional promt for second/third/... line in multiline mode.
+   */
+  const wchar_t *line_continuation_prompt;
 };
 
 /** Read a line of input

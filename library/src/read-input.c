@@ -58,6 +58,9 @@ struct console_input_t {
   CHAR_INFO *prompt;
   int prompt_size;
   
+  CHAR_INFO *continuation_prompt;
+  int continuation_prompt_size;
+  
   struct hyper_console_history_t *history;
   int history_index;
   
@@ -97,6 +100,8 @@ static BOOL init_console(struct console_input_t *con);
 static BOOL init_buffer(struct console_input_t *con);
 static void init_colors(struct console_input_t *con);
 static BOOL read_prompt(struct console_input_t *con, int length);
+static void set_continuation_prompt(struct console_input_t *con, const wchar_t *str, int len);
+static void forget_completions(struct console_input_t *con);
 static void free_console(struct console_input_t *con);
 
 static int get_output_position_from_input_position(struct console_input_t *con, int i);
@@ -105,6 +110,7 @@ static int get_input_position_from_screen_position(struct console_input_t *con, 
 
 static BOOL resize_output_buffer(struct console_input_t *con, int size);
 static BOOL fill_output_buffer(struct console_input_t *con);
+static BOOL insert_glyphs(struct console_input_t *con, int pos, const CHAR_INFO *glyphs, int glyphs_count, int repeat);
 static BOOL expand_glyphs(struct console_input_t *con);
 static BOOL colorize_matching_fences(struct console_input_t *con);
 static void highlight_completion(struct console_input_t *con);
@@ -322,6 +328,36 @@ static BOOL read_prompt(struct console_input_t *con, int length) {
   return TRUE;
 }
 
+static void set_continuation_prompt(struct console_input_t *con, const wchar_t *str, int len) {
+  int i;
+  assert(con);
+  assert(str != NULL || len <= 0);
+  
+  hyper_console_free_memory(con->continuation_prompt);
+  con->continuation_prompt = NULL;
+  con->continuation_prompt_size = 0;
+  
+  if(len < 0) {
+    if(str)
+      len = (int)wcslen(str);
+    else
+      len = 0;
+  }
+  
+  if(len == 0 || len > 1000)
+    return;
+  
+  con->continuation_prompt = hyper_console_allocate_memory(len * sizeof(CHAR_INFO));
+  if(!con->continuation_prompt)
+    return;
+  
+  con->continuation_prompt_size = len;
+  for(i = 0; i < len; ++i) {
+    con->continuation_prompt[i].Char.UnicodeChar = str[i];
+    con->continuation_prompt[i].Attributes       = con->attr_default;
+  }
+}
+
 static void forget_completions(struct console_input_t *con) {
   wchar_t **compl;
   int i;
@@ -346,6 +382,7 @@ static void free_console(struct console_input_t *con) {
   
   hyper_console_free_memory(con->input_text);
   hyper_console_free_memory(con->prompt);
+  hyper_console_free_memory(con->continuation_prompt);
   hyper_console_free_memory(con->output_buffer);
   hyper_console_free_memory(con->input_to_output_positions);
   hyper_console_free_memory(con->output_to_input_positions);
@@ -481,7 +518,7 @@ static BOOL fill_output_buffer(struct console_input_t *con) {
   return TRUE;
 }
 
-static BOOL insert_glyph(struct console_input_t *con, int pos, CHAR_INFO glyph, int repeat) {
+static BOOL insert_glyphs(struct console_input_t *con, int pos, const CHAR_INFO *glyphs, int glyphs_count, int repeat) {
   int i;
   int input_pos;
   
@@ -493,22 +530,26 @@ static BOOL insert_glyph(struct console_input_t *con, int pos, CHAR_INFO glyph, 
   assert(pos <= con->output_size);
   
   assert(repeat >= 0);
+  assert(glyphs_count >= 0);
+  assert(glyphs != NULL || glyphs_count == 0);
   
-  resize_output_buffer(con, con->output_size + repeat);
+  resize_output_buffer(con, con->output_size + glyphs_count * repeat);
   if(con->error)
     return FALSE;
     
   memmove(
-    con->output_buffer + pos + repeat,
+    con->output_buffer + pos + glyphs_count * repeat,
     con->output_buffer + pos,
-    (con->output_size - pos - repeat) * sizeof(CHAR_INFO));
+    (con->output_size - pos - glyphs_count * repeat) * sizeof(CHAR_INFO));
   memmove(
-    con->output_to_input_positions + pos + repeat,
+    con->output_to_input_positions + pos + glyphs_count * repeat,
     con->output_to_input_positions + pos,
-    (con->output_size - pos - repeat) * sizeof(int));
+    (con->output_size - pos - glyphs_count * repeat) * sizeof(int));
     
   for(i = 0; i < repeat; ++i) {
-    con->output_buffer[pos + i] = glyph;
+    int j;
+    for(j = 0; j < glyphs_count; ++j)
+      con->output_buffer[pos + i * glyphs_count + j] = glyphs[j];
   }
   
   if(pos > 0)
@@ -516,12 +557,12 @@ static BOOL insert_glyph(struct console_input_t *con, int pos, CHAR_INFO glyph, 
   else
     input_pos = 0;
     
-  for(i = 0; i < repeat; ++i) {
+  for(i = 0; i < repeat * glyphs_count; ++i) {
     con->output_to_input_positions[pos + i] = input_pos;
   }
   
   for(++input_pos; input_pos <= con->input_length; ++input_pos) {
-    con->input_to_output_positions[input_pos] += repeat;
+    con->input_to_output_positions[input_pos] += repeat * glyphs_count;
   }
   
   return TRUE;
@@ -550,10 +591,15 @@ static BOOL expand_glyphs(struct console_input_t *con) {
       int column = bufpos % console_width;
       
       con->output_buffer[bufpos].Char.UnicodeChar = L' ';
-      if(!insert_glyph(con, bufpos + 1, con->output_buffer[bufpos], console_width - column - 1))
+      if(!insert_glyphs(con, bufpos + 1, &con->output_buffer[bufpos], 1, console_width - column - 1))
         return FALSE;
-        
-      bufpos += console_width - column - 1;
+      
+      bufpos += console_width - column;
+      if(!insert_glyphs(con, bufpos, con->continuation_prompt, con->continuation_prompt_size, 1))
+        return FALSE;
+      
+      bufpos+= con->continuation_prompt_size;
+      bufpos-= 1; // will be incremented immediately
       continue;
     }
     
@@ -565,7 +611,7 @@ static BOOL expand_glyphs(struct console_input_t *con) {
         tabstop = console_width;
         
       con->output_buffer[bufpos].Char.UnicodeChar = L' ';
-      if(!insert_glyph(con, bufpos + 1, con->output_buffer[bufpos], tabstop - column - 1))
+      if(!insert_glyphs(con, bufpos + 1, &con->output_buffer[bufpos], 1, tabstop - column - 1))
         return FALSE;
         
       bufpos += tabstop - column - 1;
@@ -2071,6 +2117,10 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
   }
   
   init_buffer(con);
+  
+  if(HAVE_SETTINGS(settings, line_continuation_prompt)) {
+    set_continuation_prompt(con, settings->line_continuation_prompt, -1);
+  }
   
   if(HAVE_SETTINGS(settings, default_input) && settings->default_input) {
     insert_input_text(con, 0, settings->default_input, -1);

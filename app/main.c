@@ -1147,6 +1147,7 @@ int main() {
   settings.history = hyper_console_history_new(0);
   settings.need_more_input_predicate = need_more_input_predicate;
   settings.auto_completion = auto_completion;
+  settings.line_continuation_prompt = L"...>";
   
   signal(SIGINT, handle_sigint);
   
