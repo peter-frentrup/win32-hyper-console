@@ -1400,13 +1400,12 @@ static void handle_key_return(struct console_input_t *con) {
 }
 
 static BOOL try_indent(struct console_input_t *con, BOOL forward) {
-  int line_start;
   assert(con != NULL);
   
   if(con->input_anchor == con->input_pos) {
-    line_start = con->input_pos;
+    int line_start = con->input_pos;
     while(line_start > 0) {
-      switch(con->input_text[line_start-1]) {
+      switch(con->input_text[line_start - 1]) {
         case L' ':
         case L'\t':
           --line_start;
@@ -1415,7 +1414,7 @@ static BOOL try_indent(struct console_input_t *con, BOOL forward) {
       break;
     }
     
-    if(line_start > 0 && con->input_text[line_start-1] != L'\n') 
+    if(line_start > 0 && con->input_text[line_start - 1] != L'\n') 
       return FALSE;
       
     if(forward) {
@@ -1427,6 +1426,47 @@ static BOOL try_indent(struct console_input_t *con, BOOL forward) {
       delete_selection_no_update(con);
       update_output(con);
     }
+    return TRUE;
+  }
+  else {
+    int start = MIN(con->input_anchor, con->input_pos);
+    int end   = MAX(con->input_anchor, con->input_pos);
+    BOOL have_embedded_line_breaks = FALSE;
+    int i;
+    
+    for(i = start; i < end; ++i) {
+      if(con->input_text[i] == '\n') {
+        have_embedded_line_breaks = TRUE;
+        break;
+      }
+    }
+    
+    if(!have_embedded_line_breaks)
+      return FALSE;
+    
+    while(start > 0 && con->input_text[start - 1] != L'\n')
+      --start;
+    
+    if(forward) {
+      for(i = end; i > start; --i) {
+        if(con->input_text[i - 1] == L'\n')
+          insert_input_char(con, i, L'\t');
+      }
+      
+      insert_input_char(con, start, L'\t');
+    }
+    else {
+      for(i = end; i >= start; --i) {
+        if(i == start || con->input_text[i - 1] == L'\n') {
+          if(i < end && con->input_text[i] == L'\t') {
+            delete_input_text(con, i, 1);
+          }
+          // TODO: unindent spaces
+        }
+      }
+    }
+    
+    update_output(con);
     return TRUE;
   }
   
