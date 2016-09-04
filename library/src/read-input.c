@@ -138,6 +138,9 @@ static void move_end(struct console_input_t *con, BOOL fix_anchor);
 static BOOL delete_selection_no_update(struct console_input_t *con);
 static void copy_to_clipboard(struct console_input_t *con);
 
+static BOOL try_indent(struct console_input_t *con, BOOL forward);
+static void handle_completion(struct console_input_t *con, BOOL forward);
+
 static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er);
 static void handle_key_event(struct console_input_t *con, const KEY_EVENT_RECORD *er);
 
@@ -1395,6 +1398,40 @@ static void handle_key_return(struct console_input_t *con) {
 //  }
 }
 
+static BOOL try_indent(struct console_input_t *con, BOOL forward) {
+  int line_start;
+  assert(con != NULL);
+  
+  if(con->input_anchor == con->input_pos) {
+    line_start = con->input_pos;
+    while(line_start > 0) {
+      switch(con->input_text[line_start-1]) {
+        case L' ':
+        case L'\t':
+          --line_start;
+          continue;
+      }
+      break;
+    }
+    
+    if(line_start > 0 && con->input_text[line_start-1] != L'\n') 
+      return FALSE;
+      
+    if(forward) {
+      insert_input_char(con, con->input_pos, L'\t');
+      update_output(con);
+    }
+    else if(line_start < con->input_pos) {
+      reselect_input(con, con->input_pos - 1, con->input_anchor);
+      delete_selection_no_update(con);
+      update_output(con);
+    }
+    return TRUE;
+  }
+  
+  return FALSE;
+}
+
 static void handle_completion(struct console_input_t *con, BOOL forward) {
   assert(con != NULL);
   
@@ -1623,10 +1660,8 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
       break;
       
     case VK_TAB:
-//      delete_selection_no_update(con);
-//      insert_input_char(con, con->input_pos, L'\t');
-//      update_output(con);
-      handle_completion(con, !(er->dwControlKeyState & (SHIFT_PRESSED)));
+      if(!try_indent(con, !(er->dwControlKeyState & (SHIFT_PRESSED))))
+        handle_completion(con, !(er->dwControlKeyState & (SHIFT_PRESSED)));
       return;
   }
   
