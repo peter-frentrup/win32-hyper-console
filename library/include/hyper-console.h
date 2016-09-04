@@ -78,7 +78,7 @@ struct hyper_console_settings_t {
       \param len               The input buffer length.
       \param cursor_pos        The current cursor position.
       \param completion_start  To be set to the start position of the text to be replaced/completed.
-      \param completion_start  To be set to the end position of the text to be replaced/completed.
+      \param completion_end    To be set to the end position of the text to be replaced/completed.
       \return A NULL-terminated array of NUL-terminated strings. 
       
       The returned array and each string inside has to be allocated with hyper_console_allocate_memory()
