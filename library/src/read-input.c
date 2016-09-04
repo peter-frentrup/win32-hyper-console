@@ -64,6 +64,7 @@ struct console_input_t {
   CHAR_INFO *output_buffer; // [output_size]
   int output_capacity;
   int output_size;
+  int preferred_column;
   
   int *output_to_input_positions; // [output_size]
   int output_to_input_capacity;
@@ -209,6 +210,8 @@ static BOOL init_console(struct console_input_t *con) {
   
   con->input_text[0] = L'\0';
   con->use_position_dependent_coloring = TRUE;
+  
+  con->preferred_column = -1;
   
   con->need_more_input_predicate = default_need_more_input_predicate;
   con->auto_completion = default_auto_completion;
@@ -1095,6 +1098,8 @@ static void reselect_input(struct console_input_t *con, int new_pos, int new_anc
     
   need_redraw = (con->input_pos != con->input_anchor) || (new_pos != new_anchor) || con->have_colored_fences;
   
+  con->preferred_column = -1;
+  
   if(!con->retain_completions) {
     if(con->completions)
       need_redraw = TRUE;
@@ -1176,6 +1181,46 @@ static void move_end(struct console_input_t *con, BOOL fix_anchor) {
     reselect_input(con, con->input_length, con->input_anchor);
   else
     reselect_input(con, con->input_length, con->input_length);
+}
+
+static BOOL move_up_down(struct console_input_t *con, int direction, BOOL fix_anchor) {
+  int opos;
+  int ipos;
+  
+  assert(direction == -1 || direction == +1);
+  assert(con != NULL);
+  if(con->error)
+    return FALSE;
+  
+  if(!con->multiline_mode)
+    return FALSE;
+  
+  if(con->preferred_column >= 0)
+    opos = con->preferred_column;
+  else
+    opos = get_output_position_from_input_position(con, con->input_anchor);
+  if(direction > 0)
+    opos+= con->console_size.X;
+  else
+    opos-= con->console_size.X;
+  
+  ipos = get_input_position_from_output_position(con, opos);
+  if(ipos < 0) {
+    if(direction < 0 && con->input_pos > 0)
+      ipos = 0;
+    else if(direction > 0 && con->input_pos < con->input_length)
+      ipos = con->input_length;
+    else
+      return fix_anchor; // don't walk history when shift key was pressed
+  }
+  
+  if(fix_anchor)
+    reselect_input(con, ipos, con->input_anchor);
+  else
+    reselect_input(con, ipos, ipos);
+  
+  con->preferred_column = opos;
+  return TRUE;
 }
 
 static BOOL delete_selection_no_update(struct console_input_t *con) {
@@ -1433,15 +1478,19 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
       return;
       
     case VK_UP:
-      if(!console_scroll_key(con->output_handle, er)) {
-        navigate_history(con, -1);
-      }
+      if(console_scroll_key(con->output_handle, er))
+        return;
+      if(move_up_down(con, -1, er->dwControlKeyState & SHIFT_PRESSED))
+        return;
+      navigate_history(con, -1);
       return;
       
     case VK_DOWN:
-      if(!console_scroll_key(con->output_handle, er)) {
-        navigate_history(con, +1);
-      }
+      if(console_scroll_key(con->output_handle, er))
+        return;
+      if(move_up_down(con, +1, er->dwControlKeyState & SHIFT_PRESSED))
+        return;
+      navigate_history(con, +1);
       return;
       
     case VK_PRIOR:
