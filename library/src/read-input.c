@@ -32,6 +32,10 @@
 #endif
 
 
+#ifndef ENABLE_LVB_GRID_WORLDWIDE
+#  define ENABLE_LVB_GRID_WORLDWIDE  0x0010 /* since Win 10 Aniversary Update (?) */
+#endif
+
 struct console_input_t {
   HANDLE input_handle;
   HANDLE output_handle;
@@ -1795,7 +1799,7 @@ static BOOL input_loop(struct console_input_t *con) {
     return FALSE;
   }
   
-  if(!SetConsoleMode(con->input_handle, ENABLE_WINDOW_INPUT | ENABLE_MOUSE_INPUT | ENABLE_EXTENDED_FLAGS)) {
+  if(!SetConsoleMode(con->input_handle, ENABLE_WINDOW_INPUT | ENABLE_MOUSE_INPUT | ENABLE_EXTENDED_FLAGS | ENABLE_LVB_GRID_WORLDWIDE)) {
     con->error = "SetConsoleMode";
     return FALSE;
   }
