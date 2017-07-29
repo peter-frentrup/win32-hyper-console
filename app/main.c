@@ -45,9 +45,9 @@ static void debug_printf(const wchar_t *format, ...) {
 }
 
 static wchar_t *append_text(
-  wchar_t       *dst, 
-  const wchar_t *dst_end, 
-  const wchar_t *src, 
+  wchar_t       *dst,
+  const wchar_t *dst_end,
+  const wchar_t *src,
   const wchar_t *optional_src_end
 ) {
   assert(dst != NULL);
@@ -1024,7 +1024,7 @@ static void show_help(void) {
   
 //  write_simple_link(L"debug information", L"debug", L"debug");
 //  printf("\t Show the current console buffer status.\n");
-  
+
   write_simple_link(L"list current directory", L"dir", L"dir");
   printf("\t List the content of the current directory.\n");
   
@@ -1081,22 +1081,23 @@ static BOOL need_more_input_predicate(void *context, const wchar_t *buffer, int 
 }
 
 static wchar_t **auto_completion(void *context, const wchar_t *buffer, int len, int cursor_pos, int *completion_start, int *completion_end) {
-  static const wchar_t *all_words[] = { 
-    L"bottom", 
-    L"cd", 
-    L"cd+dir", 
-    L"cls", 
-    L"color", 
-    L"dir", 
-    L"drives", 
-    L"help", 
-    L"lorem", 
-    L"multi", 
-    L"open", 
-    L"quit", 
-    L"run", 
-    L"single", 
-    L"tree" };
+  static const wchar_t *all_words[] = {
+    L"bottom",
+    L"cd",
+    L"cd+dir",
+    L"cls",
+    L"color",
+    L"dir",
+    L"drives",
+    L"help",
+    L"lorem",
+    L"multi",
+    L"open",
+    L"quit",
+    L"run",
+    L"single",
+    L"tree"
+  };
   const size_t num_words = sizeof(all_words) / sizeof(all_words[0]);
   
   int word_start = cursor_pos;
@@ -1104,20 +1105,20 @@ static wchar_t **auto_completion(void *context, const wchar_t *buffer, int len, 
   wchar_t **results;
   wchar_t **next;
   int i;
-
+  
   while(word_start > 0 && buffer[word_start - 1] > L' ')
     --word_start;
     
   while(word_end < len && buffer[word_end] > L' ')
     ++word_end;
-  
+    
   *completion_start = word_start;
   *completion_end = word_end;
   
   results = hyper_console_allocate_memory(sizeof(wchar_t*) * (num_words + 1));
   if(!results)
     return NULL;
-  
+    
   next = results;
   for(i = 0; i < num_words; ++i) {
     size_t word_len = wcslen(all_words[i]);
@@ -1238,7 +1239,7 @@ int main() {
 //      hyperlink_system_print_debug_info();
 //      continue;
 //    }
-    
+
     if(first_word_equals(str, L"open")) {
       open_document(str + 4);
       continue;
@@ -1274,6 +1275,7 @@ int main() {
     write_unicode(L"'\n");
   }
   
+  hyper_console_free_memory(str);
   hyper_console_done_hyperlink_system();
   hyper_console_history_free(settings.history);
   
