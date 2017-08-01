@@ -1964,19 +1964,30 @@ static void finish_input(struct console_input_t *con) {
 }
 
 static BOOL input_loop(struct console_input_t *con) {
-  DWORD old_mode;
+  DWORD old_input_mode;
+  DWORD old_output_mode;
   
   assert(con != NULL);
   if(con->error)
     return FALSE;
     
-  if(!GetConsoleMode(con->input_handle, &old_mode)) {
-    con->error = "GetConsoleMode";
+  if(!GetConsoleMode(con->input_handle, &old_input_mode)) {
+    con->error = "GetConsoleMode on input_handle";
     return FALSE;
   }
   
-  if(!SetConsoleMode(con->input_handle, ENABLE_WINDOW_INPUT | ENABLE_MOUSE_INPUT | ENABLE_EXTENDED_FLAGS | ENABLE_LVB_GRID_WORLDWIDE)) {
-    con->error = "SetConsoleMode";
+  if(!GetConsoleMode(con->output_handle, &old_output_mode)) {
+    con->error = "GetConsoleMode on input_handle";
+    return FALSE;
+  }
+  
+  if(!SetConsoleMode(con->input_handle, ENABLE_WINDOW_INPUT | ENABLE_MOUSE_INPUT | ENABLE_EXTENDED_FLAGS)) {
+    con->error = "SetConsoleMode on input_handle";
+    return FALSE;
+  }
+  
+  if(!SetConsoleMode(con->output_handle, ENABLE_LVB_GRID_WORLDWIDE)) {
+    con->error = "SetConsoleMode on output_handle";
     return FALSE;
   }
   
@@ -2069,10 +2080,12 @@ static BOOL input_loop(struct console_input_t *con) {
   
   hyperlink_system_end_input();
   
+  SetConsoleMode(con->input_handle, old_input_mode);
+  SetConsoleMode(con->output_handle, old_output_mode);
+  
   if(!WriteConsoleA(con->output_handle, "\n", 1, NULL, NULL))
     con->error = "WriteConsoleA";
     
-  SetConsoleMode(con->input_handle, old_mode);
   return !con->error;
 }
 
