@@ -1987,8 +1987,12 @@ static BOOL input_loop(struct console_input_t *con) {
   }
   
   if(!SetConsoleMode(con->output_handle, ENABLE_LVB_GRID_WORLDWIDE)) {
-    con->error = "SetConsoleMode on output_handle";
-    return FALSE;
+    /* Trying to set ENABLE_LVB_GRID_WORLDWIDE will fail on pre-Win10 (v10.0.14393) systems 
+       with "Invalid Parameter".
+       But this setting is not essential for correct functioning, so we ignore any error.
+     */
+    //con->error = "SetConsoleMode on output_handle";
+    //return FALSE;
   }
   
   hyperlink_system_start_input(con->console_size.X, con->input_line_coord_y);
