@@ -1,0 +1,33 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "D:/Programme/Microsoft Visual Studio 14.0/VC/include/*",
+                "C:/Program Files (x86)/Windows Kits/10/Include/10.0.14393.0/um",
+                "C:/Program Files (x86)/Windows Kits/10/Include/10.0.14393.0/ucrt",
+                "C:/Program Files (x86)/Windows Kits/10/Include/10.0.14393.0/shared",
+                "C:/Program Files (x86)/Windows Kits/10/Include/10.0.14393.0/winrt",
+                "${workspaceRoot}"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE"
+            ],
+            "intelliSenseMode": "msvc-x64",
+            "browse": {
+                "path": [
+                    "D:/Programme/Microsoft Visual Studio 14.0/VC/include/*",
+                    "C:/Program Files (x86)/Windows Kits/10/Include/10.0.14393.0/um",
+                    "C:/Program Files (x86)/Windows Kits/10/Include/10.0.14393.0/ucrt",
+                    "C:/Program Files (x86)/Windows Kits/10/Include/10.0.14393.0/shared",
+                    "C:/Program Files (x86)/Windows Kits/10/Include/10.0.14393.0/winrt",
+                    "${workspaceRoot}"
+                ],
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": ""
+            }
+        }
+    ],
+    "version": 3
+}
