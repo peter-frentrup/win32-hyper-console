@@ -501,13 +501,13 @@ static BOOL raw_edit_filter_selection(struct console_search_t *cs, const wchar_t
   memmove(
     cs->filter_text + start + ins_length,
     cs->filter_text + end,
-    old_length - end);
+    sizeof(wchar_t) * (old_length - end));
   
   if(ins) {
     memmove(
       cs->filter_text + start,
       ins,
-      ins_length);
+      ins_length * sizeof(wchar_t));
   }
   
   cs->filter_anchor = start;
