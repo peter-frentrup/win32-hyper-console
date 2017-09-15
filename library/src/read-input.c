@@ -1360,6 +1360,7 @@ static BOOL begin_navigate_history(struct console_input_t *con) {
   if(has_hard_line_break(con))
     return FALSE;
     
+  console_history_set_future(con->history, con->input_text, con->input_length);
   con->navigating_history = TRUE;
   //if(con->input_anchor == con->input_length && con->input_pos == con->input_length)
     return TRUE;
@@ -1371,6 +1372,7 @@ static BOOL begin_navigate_history(struct console_input_t *con) {
 static void cancel_navigate_history(struct console_input_t *con) {
   assert(con != NULL);
   
+  console_history_set_future(con->history, NULL, 0);
   con->history_index = console_history_count(con->history);
   con->navigating_history = FALSE;
 }
@@ -1385,15 +1387,13 @@ static void navigate_history(struct console_input_t *con, int delta) {
   if(!hist_text) {
     int count = console_history_count(con->history);
     if(con->history_index + delta >= count) {
-      con->history_index = count;
+      con->history_index = count; 
+      delta = 0;
       
-      con->input_anchor = 0;
-      con->input_pos = con->input_length;
-      delete_selection_no_update(con);
-      update_output(con);
+      hist_text = console_history_get_future(con->history, &hist_text_length);
     }
-    
-    return;
+    else
+      return;
   }
   
   con->history_index += delta;
@@ -2250,6 +2250,7 @@ HYPER_CONSOLE_API
 wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
   struct console_input_t con[1];
   struct console_input_t *old_con;
+  BOOL ignore_default_input = FALSE;
   
   if(!init_console(con)) {
     void *callback_context = NULL;
@@ -2281,8 +2282,19 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
   }
   
   if(HAVE_SETTINGS(settings, history)) {
+    const wchar_t *text = NULL;
+    int text_length = 0;
+    
     con->history = settings->history;
     con->history_index = console_history_count(con->history);
+    
+    text = console_history_get_future(con->history, &text_length);
+    if(text) {
+      ignore_default_input = TRUE;
+      insert_input_text(con, 0, text, text_length);
+      con->input_anchor = 0;
+    }
+    console_history_set_future(con->history, NULL, 0);
   }
   
   if(HAVE_SETTINGS(settings, callback_context)) {
@@ -2303,7 +2315,7 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
     set_continuation_prompt(con, settings->line_continuation_prompt, -1);
   }
   
-  if(HAVE_SETTINGS(settings, default_input) && settings->default_input) {
+  if(!ignore_default_input && HAVE_SETTINGS(settings, default_input) && settings->default_input) {
     insert_input_text(con, 0, settings->default_input, -1);
     con->input_anchor = 0;
   }
@@ -2360,6 +2372,9 @@ BOOL stop_current_input(BOOL do_abort, const wchar_t *opt_replace_input) {
     return FALSE;
     
   if(opt_replace_input) {
+    if(!do_abort) 
+      console_history_set_future(con->history, con->input_text, con->input_length);
+    
     delete_input_text(con, 0, con->input_length);
     insert_input_text(con, 0, opt_replace_input, -1);
     //update_output(con);
