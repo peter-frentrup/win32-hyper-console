@@ -97,6 +97,7 @@ struct console_input_t {
   unsigned redo_in_mark_mode: 1;
   unsigned continue_with_search: 1;
   unsigned retain_completions: 1;
+  unsigned navigating_history: 1;
 };
 
 static BOOL is_console(HANDLE handle);
@@ -126,6 +127,7 @@ static BOOL set_output_cursor_position(struct console_input_t *con);
 
 static BOOL selection_equals(struct console_input_t *con, const wchar_t *str);
 static BOOL can_auto_surround(struct console_input_t *con);
+static BOOL has_hard_line_break(struct console_input_t *con);
 
 static BOOL resize_input_text(struct console_input_t *con, int length);
 static BOOL insert_input_text(struct console_input_t *con, int pos, const  wchar_t *str, int length);
@@ -142,6 +144,12 @@ static void move_end(struct console_input_t *con, BOOL fix_anchor);
 static BOOL delete_selection_no_update(struct console_input_t *con);
 static void copy_to_clipboard(struct console_input_t *con);
 
+static BOOL begin_navigate_history(struct console_input_t *con);
+static void cancel_navigate_history(struct console_input_t *con);
+static void navigate_history(struct console_input_t *con, int delta);
+static BOOL handle_history_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er);
+
+static void handle_key_return(struct console_input_t *con);
 static BOOL try_indent(struct console_input_t *con, BOOL forward);
 static void handle_completion(struct console_input_t *con, BOOL forward);
 
@@ -353,11 +361,11 @@ static void set_continuation_prompt(struct console_input_t *con, const wchar_t *
   
   if(len == 0 || len > 1000)
     return;
-  
+    
   con->continuation_prompt = hyper_console_allocate_memory(len * sizeof(CHAR_INFO));
   if(!con->continuation_prompt)
     return;
-  
+    
   con->continuation_prompt_size = len;
   for(i = 0; i < len; ++i) {
     con->continuation_prompt[i].Char.UnicodeChar = str[i];
@@ -374,7 +382,7 @@ static void forget_completions(struct console_input_t *con) {
   compl = con->completions;
   for(i = 0; i < con->completions_count; ++i)
     hyper_console_free_memory(compl[i]);
-  
+    
   hyper_console_free_memory(con->completions);
   
   con->completions = NULL;
@@ -600,13 +608,13 @@ static BOOL expand_glyphs(struct console_input_t *con) {
       con->output_buffer[bufpos].Char.UnicodeChar = L' ';
       if(!insert_glyphs(con, bufpos + 1, &con->output_buffer[bufpos], 1, console_width - column - 1))
         return FALSE;
-      
+        
       bufpos += console_width - column;
       if(!insert_glyphs(con, bufpos, con->continuation_prompt, con->continuation_prompt_size, 1))
         return FALSE;
-      
-      bufpos+= con->continuation_prompt_size;
-      bufpos-= 1; // will be incremented immediately
+        
+      bufpos += con->continuation_prompt_size;
+      bufpos -= 1; // will be incremented immediately
       continue;
     }
     
@@ -948,6 +956,7 @@ static BOOL selection_equals(struct console_input_t *con, const wchar_t *str) {
 }
 
 static BOOL can_auto_surround(struct console_input_t *con) {
+  assert(con != NULL);
   if(con->input_anchor == con->input_pos)
     return FALSE;
     
@@ -979,6 +988,19 @@ static BOOL can_auto_surround(struct console_input_t *con) {
     return FALSE;
     
   return TRUE;
+}
+
+static BOOL has_hard_line_break(struct console_input_t *con) {
+  int i;
+  assert(con != NULL);
+  if(!con->multiline_mode)
+    return FALSE;
+    
+  for(i = 0; i < con->input_length; ++i)
+    if(con->input_text[i] == L'\n')
+      return TRUE;
+      
+  return FALSE;
 }
 
 static BOOL resize_input_text(struct console_input_t *con, int length) {
@@ -1138,7 +1160,7 @@ static void reselect_input(struct console_input_t *con, int new_pos, int new_anc
   assert(con != NULL);
   if(con->error)
     return;
-  
+    
   if(new_pos < 0)
     new_pos = 0;
     
@@ -1245,19 +1267,19 @@ static BOOL move_up_down(struct console_input_t *con, int direction, BOOL fix_an
   assert(con != NULL);
   if(con->error)
     return FALSE;
-  
+    
   if(!con->multiline_mode)
     return FALSE;
-  
+    
   if(con->preferred_column >= 0)
     opos = con->preferred_column;
   else
     opos = get_output_position_from_input_position(con, con->input_anchor);
   if(direction > 0)
-    opos+= con->console_size.X;
+    opos += con->console_size.X;
   else
-    opos-= con->console_size.X;
-  
+    opos -= con->console_size.X;
+    
   ipos = get_input_position_from_output_position(con, opos);
   if(ipos < 0) {
     if(direction < 0 && con->input_pos > 0)
@@ -1272,7 +1294,7 @@ static BOOL move_up_down(struct console_input_t *con, int direction, BOOL fix_an
     reselect_input(con, ipos, con->input_anchor);
   else
     reselect_input(con, ipos, ipos);
-  
+    
   con->preferred_column = opos;
   return TRUE;
 }
@@ -1329,6 +1351,30 @@ static void copy_to_clipboard(struct console_input_t *con) {
   CloseClipboard();
 }
 
+static BOOL begin_navigate_history(struct console_input_t *con) {
+  assert(con != NULL);
+  
+  if(con->navigating_history)
+    return TRUE;
+    
+  if(has_hard_line_break(con))
+    return FALSE;
+    
+  con->navigating_history = TRUE;
+  //if(con->input_anchor == con->input_length && con->input_pos == con->input_length)
+    return TRUE;
+    
+  //reselect_input(con, con->input_length, con->input_length);
+  //return FALSE;
+}
+
+static void cancel_navigate_history(struct console_input_t *con) {
+  assert(con != NULL);
+  
+  con->history_index = console_history_count(con->history);
+  con->navigating_history = FALSE;
+}
+
 static void navigate_history(struct console_input_t *con, int delta) {
   const wchar_t *hist_text;
   int hist_text_length;
@@ -1356,11 +1402,37 @@ static void navigate_history(struct console_input_t *con, int delta) {
   con->input_pos = con->input_length;
   delete_selection_no_update(con);
   insert_input_text(con, 0, hist_text, hist_text_length);
-  if(delta > 0) {
-    con->input_anchor = 0;
-    con->input_pos = 0;
-  }
   update_output(con);
+}
+
+static BOOL handle_history_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er) {
+  assert(con != NULL);
+  assert(er != NULL);
+  
+  if(!con->navigating_history)
+    return FALSE;
+    
+  switch(er->wVirtualKeyCode) {
+    case VK_SHIFT:
+    case VK_CONTROL:
+    case VK_MENU:
+      return TRUE;
+      
+    case VK_UP:
+      if(console_scroll_key(con->output_handle, er))
+        return TRUE;
+      navigate_history(con, -1);
+      return TRUE;
+      
+    case VK_DOWN:
+      if(console_scroll_key(con->output_handle, er))
+        return TRUE;
+      navigate_history(con, +1);
+      return TRUE;
+  }
+  
+  cancel_navigate_history(con);
+  return FALSE;
 }
 
 static void handle_key_return(struct console_input_t *con) {
@@ -1418,7 +1490,7 @@ static BOOL try_indent(struct console_input_t *con, BOOL forward) {
       break;
     }
     
-    if(line_start > 0 && con->input_text[line_start - 1] != L'\n') 
+    if(line_start > 0 && con->input_text[line_start - 1] != L'\n')
       return FALSE;
       
     if(forward) {
@@ -1447,10 +1519,10 @@ static BOOL try_indent(struct console_input_t *con, BOOL forward) {
     
     if(!have_embedded_line_breaks)
       return FALSE;
-    
+      
     while(start > 0 && con->input_text[start - 1] != L'\n')
       --start;
-    
+      
     if(forward) {
       for(i = end; i > start; --i) {
         if(con->input_text[i - 1] == L'\n')
@@ -1489,13 +1561,13 @@ static void handle_completion(struct console_input_t *con, BOOL forward) {
     assert(con->completions == NULL);
     
     results = con->auto_completion(
-      con->callback_context, 
-      con->input_text, 
-      con->input_length,
-      MIN(con->input_pos, con->input_anchor),
-      &start,
-      &end);
-    
+                con->callback_context,
+                con->input_text,
+                con->input_length,
+                MIN(con->input_pos, con->input_anchor),
+                &start,
+                &end);
+                
     if(results) {
       con->completions = results;
       con->completions_count = 0;
@@ -1537,12 +1609,12 @@ static void handle_completion(struct console_input_t *con, BOOL forward) {
       con->completion_index++;
     else
       con->completion_index--;
-    
+      
     if(con->completion_index < 0)
       con->completion_index = con->completions_count - 1;
     else if(con->completion_index >= con->completions_count)
       con->completion_index = 0;
-    
+      
     reselect_input(con, con->completion_pos, con->completion_end);
     delete_selection_no_update(con);
     insert_input_text(con, con->completion_pos, con->completions[con->completion_index], -1);
@@ -1555,7 +1627,11 @@ static void handle_completion(struct console_input_t *con, BOOL forward) {
 
 static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD *er) {
   assert(con != NULL);
+  assert(er != NULL);
   
+  if(handle_history_key_down(con, er))
+    return;
+    
   switch(er->wVirtualKeyCode) {
     case VK_RETURN:
       handle_key_return(con);
@@ -1610,7 +1686,8 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
         return;
       if(move_up_down(con, -1, er->dwControlKeyState & SHIFT_PRESSED))
         return;
-      navigate_history(con, -1);
+      if(begin_navigate_history(con))
+        navigate_history(con, -1);
       return;
       
     case VK_DOWN:
@@ -1618,7 +1695,8 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
         return;
       if(move_up_down(con, +1, er->dwControlKeyState & SHIFT_PRESSED))
         return;
-      navigate_history(con, +1);
+      if(begin_navigate_history(con))
+        navigate_history(con, +1);
       return;
       
     case VK_PRIOR:
@@ -1767,6 +1845,7 @@ static void handle_lbutton_down(struct console_input_t *con, const MOUSE_EVENT_R
   assert(con != NULL);
   assert(er != NULL);
   
+  cancel_navigate_history(con);
   i = get_input_position_from_screen_position(con, er->dwMousePosition, TRUE);
   
   if(i >= 0) {
@@ -1987,7 +2066,7 @@ static BOOL input_loop(struct console_input_t *con) {
   }
   
   if(!SetConsoleMode(con->output_handle, ENABLE_LVB_GRID_WORLDWIDE)) {
-    /* Trying to set ENABLE_LVB_GRID_WORLDWIDE will fail on pre-Win10 (v10.0.14393) systems 
+    /* Trying to set ENABLE_LVB_GRID_WORLDWIDE will fail on pre-Win10 (v10.0.14393) systems
        with "Invalid Parameter".
        But this setting is not essential for correct functioning, so we ignore any error.
      */
@@ -2251,7 +2330,7 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
     wchar_t *result = con->input_text;
     console_history_add(con->history, con->input_text, con->input_length);
     
-    if( con->need_more_input_predicate == default_multiline_need_more_input_predicate && 
+    if( con->need_more_input_predicate == default_multiline_need_more_input_predicate &&
         con->input_length > 0 &&
         result[con->input_length - 1] == L'\n')
     {
