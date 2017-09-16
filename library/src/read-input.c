@@ -2206,6 +2206,10 @@ void hyper_console_interrupt(void (*callback)(void*), void *callback_arg) {
   if(con) {
     COORD pos;
     CONSOLE_SCREEN_BUFFER_INFO csbi;
+    struct dangling_hyperlinks_t *prompt_links;
+    int global_line_before;
+    int global_line_after;
+    int dummy_column;
     
     con->output_size = 0;
     write_output_buffer_lines(con);
@@ -2215,12 +2219,16 @@ void hyper_console_interrupt(void (*callback)(void*), void *callback_arg) {
       debug_printf(L"hyper_console_interrupt: SetConsoleCursorPosition failed.");
     }
     
+    if(!hyperlink_system_local_to_global(pos, &global_line_before, &dummy_column)) {
+      debug_printf(L"hyper_console_interrupt: cannot get global_line_before.");
+    }
+    
     SetConsoleMode(con->input_handle, con->old_input_mode);
     SetConsoleMode(con->output_handle, con->old_output_mode);
     
     hyperlink_system_end_input();
-    hyperlink_system_clear_links_after_cursor(); // TODO: restore those links at hyperlink_system_start_input()
-  
+    prompt_links = hyperlink_system_cut_links_after_cursor();
+    
     callback(callback_arg);
     
     set_console_modes(con);
@@ -2240,6 +2248,14 @@ void hyper_console_interrupt(void (*callback)(void*), void *callback_arg) {
     update_output(con);
     
     hyperlink_system_start_input(con->console_size.X, con->input_line_coord_y);
+    
+    pos.Y = con->input_line_coord_y;
+    if(!hyperlink_system_local_to_global(pos, &global_line_after, &dummy_column)) {
+      debug_printf(L"hyper_console_interrupt: cannot get global_line_after.");
+    }
+    
+    hyperlink_system_move_links(prompt_links, global_line_after - global_line_before);
+    hyperlink_system_paste_and_activate_links(prompt_links);
   }
   else {
     callback(callback_arg);

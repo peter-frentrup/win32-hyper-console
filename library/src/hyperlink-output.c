@@ -31,6 +31,10 @@ struct hyperlink_t {
   WORD attr_active;
 };
 
+struct dangling_hyperlinks_t { // just another name for struct hyperlink_t
+  struct hyperlink_t first;
+};
+
 struct hyperlink_collection_t {
   HANDLE output_handle;
   
@@ -59,14 +63,18 @@ static void free_link_at(struct hyperlink_t **last_link);
 static void clean_old_links(struct hyperlink_collection_t *hc, int first_keep_line);
 static struct hyperlink_t *open_new_link(struct hyperlink_collection_t *hc);
 static void close_link(struct hyperlink_collection_t *hc);
-static void clear_links_after_cursor(struct hyperlink_collection_t *hc);
+static struct dangling_hyperlinks_t *cut_links_after_cursor(struct hyperlink_collection_t *hc);
 static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t *title, int title_length);
 static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wchar_t *text, int text_length);
 static WORD set_open_link_color(struct hyperlink_collection_t *hc, WORD attribute);
 
+static void hs_paste_and_activate_links(struct hyperlink_collection_t *hc, struct dangling_hyperlinks_t *links);
+
 static BOOL is_global_position_before(int a_line, int a_col, int b_line, int b_col);
 static struct hyperlink_t *find_link(struct hyperlink_collection_t *hc, COORD pos);
 static int find_link_visual_position(struct hyperlink_collection_t *hc, const struct hyperlink_t *link, COORD *position);
+
+static BOOL hs_local_to_global(struct hyperlink_collection_t *hc, COORD local, int *line, int *column);
 
 static BOOL save_old_console_title(struct hyperlink_collection_t *hc);
 static void set_console_title(struct hyperlink_collection_t *hc, const wchar_t *title);
@@ -143,6 +151,21 @@ static void free_hyperlink_collection(struct hyperlink_collection_t *hc) {
   
   //hyper_console_free_memory(hc->old_title);
   memset(hc, 0, sizeof(struct hyperlink_collection_t));
+}
+
+void hyperlink_system_free_dangling_hyperlinks(struct dangling_hyperlinks_t *links) {
+  struct hyperlink_t *link = (struct hyperlink_t*)links;
+  while(link)
+    free_link_at(&link);
+}
+
+void hyperlink_system_move_links(struct dangling_hyperlinks_t *links, int delta_lines) {
+  struct hyperlink_t *link;
+  
+  for(link = (struct hyperlink_t*)links; link != NULL; link = link->prev_link) {
+    link->start_global_line+= delta_lines;
+    link->end_global_line+= delta_lines;
+  }
 }
 
 static void free_link_at(struct hyperlink_t **last_link) {
@@ -288,21 +311,23 @@ static void close_link(struct hyperlink_collection_t *hc) {
   link->end_column      = column;
 }
 
-static void clear_links_after_cursor(struct hyperlink_collection_t *hc) {
+static struct dangling_hyperlinks_t *cut_links_after_cursor(struct hyperlink_collection_t *hc) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   int line;
   int column;
   struct hyperlink_t **link_ptr;
   int skip_count;
+  struct hyperlink_t *result = NULL;
+  struct hyperlink_t **result_ptr = &result;
   
   assert(hc != NULL);
   
   if(!GetConsoleScreenBufferInfo(hc->output_handle, &csbi))
-    return;
+    return NULL;
   
   console_scrollback_update(hc->scrollback, csbi.dwCursorPosition.Y);
   if(!console_scollback_local_to_global(hc->scrollback, csbi.dwCursorPosition, &line, &column))
-    return;
+    return NULL;
   
   skip_count = hc->num_open_links;
   link_ptr = &hc->last_link;
@@ -315,12 +340,17 @@ static void clear_links_after_cursor(struct hyperlink_collection_t *hc) {
   while(*link_ptr) {
     struct hyperlink_t *link = *link_ptr;
     if(is_global_position_before(line, column, link->end_global_line, link->end_column)) {
-      deactivate_link(hc, link);
-      free_link_at(link_ptr);
+      //deactivate_link(hc, link);
+      *result_ptr = link;
+      *link_ptr = link->prev_link;
+      link->prev_link = NULL;
+      result_ptr = &link->prev_link;
     }
     else
       link_ptr = &link->prev_link;
   }
+  
+  return (struct dangling_hyperlinks_t*)result;
 }
 
 static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t *title, int title_length) {
@@ -397,6 +427,29 @@ static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wc
   else {
     link->input_text = NULL;
   }
+}
+
+static void hs_paste_and_activate_links(struct hyperlink_collection_t *hc, struct dangling_hyperlinks_t *links) {
+  int skip_count;
+  struct hyperlink_t **link_ptr;
+  struct hyperlink_t *old_link;
+  
+  assert(hc);
+  
+  skip_count = hc->num_open_links;
+  link_ptr = &hc->last_link;
+  while(skip_count-- > 0) {
+    assert(*link_ptr != NULL);
+    
+    link_ptr = &(*link_ptr)->prev_link;
+  }
+  
+  old_link = *link_ptr;
+  *link_ptr = (struct hyperlink_t *)links;
+  while(*link_ptr)
+    link_ptr = &(*link_ptr)->prev_link;
+    
+  *link_ptr = old_link;
 }
 
 static WORD set_open_link_color(struct hyperlink_collection_t *hc, WORD attribute) {
@@ -502,6 +555,12 @@ static int find_link_visual_position(
     
   *position = start;
   return length;
+}
+
+static BOOL hs_local_to_global(struct hyperlink_collection_t *hc, COORD local, int *line, int *column) {
+  assert(hc != NULL);
+  
+  return console_scollback_local_to_global(hc->scrollback, local, line, column);
 }
 
 static BOOL save_old_console_title(struct hyperlink_collection_t *hc) {
@@ -1005,15 +1064,53 @@ WORD hyper_console_set_link_color(WORD attribute) {
   return old_color;
 }
 
-void hyperlink_system_clear_links_after_cursor(void) {
+struct dangling_hyperlinks_t *hyperlink_system_cut_links_after_cursor(void) {
+  struct dangling_hyperlinks_t *result;
+  
   if(!_have_hyperlink_system)
-    return;
+    return NULL;
   
   EnterCriticalSection(_cs_global_links);
   
-  clear_links_after_cursor(_global_links);
+  result = cut_links_after_cursor(_global_links);
   
   LeaveCriticalSection(_cs_global_links);
+  
+  return result;
+}
+
+void hyperlink_system_paste_and_activate_links(struct dangling_hyperlinks_t *links) {
+  if(!_have_hyperlink_system) {
+    hyperlink_system_free_dangling_hyperlinks(links);
+    return;
+  }
+  
+  EnterCriticalSection(_cs_global_links);
+  
+  hs_paste_and_activate_links(_global_links, links);
+  
+  LeaveCriticalSection(_cs_global_links);
+}
+
+BOOL hyperlink_system_local_to_global(COORD local, int *line, int *column) {
+  BOOL result;
+  
+  assert(line != NULL);
+  assert(column != NULL);
+  
+  *line = 0;
+  *column = 0;
+  
+  if(!_have_hyperlink_system)
+    return FALSE;
+  
+  EnterCriticalSection(_cs_global_links);
+  
+  result = hs_local_to_global(_global_links, local, line, column);
+  
+  LeaveCriticalSection(_cs_global_links);
+  
+  return result;
 }
 
 BOOL hyperlink_system_handle_events(INPUT_RECORD *event) {
