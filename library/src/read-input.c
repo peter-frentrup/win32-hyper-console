@@ -1510,7 +1510,6 @@ static BOOL try_indent(struct console_input_t *con, BOOL forward) {
       delete_selection_no_update(con);
       update_output(con);
     }
-    return TRUE;
   }
   else {
     int start = MIN(con->input_anchor, con->input_pos);
@@ -1551,10 +1550,8 @@ static BOOL try_indent(struct console_input_t *con, BOOL forward) {
     }
     
     update_output(con);
-    return TRUE;
   }
-  
-  return FALSE;
+  return TRUE;
 }
 
 static void handle_completion(struct console_input_t *con, BOOL forward) {
