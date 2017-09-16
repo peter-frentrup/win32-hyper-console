@@ -3,7 +3,7 @@
 
 #include <hyper-console.h>
 
-
+void hyperlink_system_clear_links_after_cursor(void);
 
 BOOL hyperlink_system_handle_events(INPUT_RECORD *event);
 

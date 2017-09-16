@@ -87,6 +87,9 @@ struct console_input_t {
   
   const char *error;
   int dirty_lines;
+
+  DWORD old_input_mode;
+  DWORD old_output_mode;
   
   unsigned use_position_dependent_coloring: 1;
   unsigned have_colored_fences: 1;
@@ -168,6 +171,7 @@ static void handle_unknown_event(struct console_input_t *con, const INPUT_RECORD
 static BOOL is_mouse_event_inside_edit_region(struct console_input_t *con, INPUT_RECORD *ir);
 
 static void finish_input(struct console_input_t *con);
+static BOOL set_console_modes(struct console_input_t *con);
 static BOOL input_loop(struct console_input_t *con);
 
 static struct console_input_t *get_current_input(void);
@@ -2047,24 +2051,9 @@ static void finish_input(struct console_input_t *con) {
   update_output(con);
 }
 
-static BOOL input_loop(struct console_input_t *con) {
-  DWORD old_input_mode;
-  DWORD old_output_mode;
-  
+static BOOL set_console_modes(struct console_input_t *con) {
   assert(con != NULL);
-  if(con->error)
-    return FALSE;
-    
-  if(!GetConsoleMode(con->input_handle, &old_input_mode)) {
-    con->error = "GetConsoleMode on input_handle";
-    return FALSE;
-  }
-  
-  if(!GetConsoleMode(con->output_handle, &old_output_mode)) {
-    con->error = "GetConsoleMode on input_handle";
-    return FALSE;
-  }
-  
+
   if(!SetConsoleMode(con->input_handle, ENABLE_WINDOW_INPUT | ENABLE_MOUSE_INPUT | ENABLE_EXTENDED_FLAGS)) {
     con->error = "SetConsoleMode on input_handle";
     return FALSE;
@@ -2079,6 +2068,27 @@ static BOOL input_loop(struct console_input_t *con) {
     //return FALSE;
   }
   
+  return TRUE;
+}
+
+static BOOL input_loop(struct console_input_t *con) {
+  assert(con != NULL);
+  if(con->error)
+    return FALSE;
+    
+  if(!GetConsoleMode(con->input_handle, &con->old_input_mode)) {
+    con->error = "GetConsoleMode on input_handle";
+    return FALSE;
+  }
+  
+  if(!GetConsoleMode(con->output_handle, &con->old_output_mode)) {
+    con->error = "GetConsoleMode on input_handle";
+    return FALSE;
+  }
+  
+  if(!set_console_modes(con))
+    return FALSE;
+
   hyperlink_system_start_input(con->console_size.X, con->input_line_coord_y);
   
   // There might be some links in the prompt, which just changed their color.
@@ -2168,13 +2178,63 @@ static BOOL input_loop(struct console_input_t *con) {
   
   hyperlink_system_end_input();
   
-  SetConsoleMode(con->input_handle, old_input_mode);
-  SetConsoleMode(con->output_handle, old_output_mode);
+  SetConsoleMode(con->input_handle, con->old_input_mode);
+  SetConsoleMode(con->output_handle, con->old_output_mode);
   
   if(!WriteConsoleA(con->output_handle, "\n", 1, NULL, NULL))
     con->error = "WriteConsoleA";
     
   return !con->error;
+}
+
+HYPER_CONSOLE_API
+void hyper_console_interrupt(void (*callback)(void*), void *callback_arg) {
+  struct console_input_t *con;
+  
+  assert(callback != NULL);
+  
+  con = get_current_input();
+  if(con) {
+    COORD pos;
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    
+    con->output_size = 0;
+    write_output_buffer_lines(con);
+    pos.X = 0;
+    pos.Y = con->input_line_coord_y;
+    if(!SetConsoleCursorPosition(con->output_handle, pos)) {
+      debug_printf(L"hyper_console_interrupt: SetConsoleCursorPosition failed.");
+    }
+    
+    SetConsoleMode(con->input_handle, con->old_input_mode);
+    SetConsoleMode(con->output_handle, con->old_output_mode);
+    
+    hyperlink_system_end_input();
+    hyperlink_system_clear_links_after_cursor(); // TODO: restore those links at hyperlink_system_start_input()
+  
+    callback(callback_arg);
+    
+    set_console_modes(con);
+    if(!GetConsoleScreenBufferInfo(con->output_handle, &csbi)) {
+      con->error = "GetConsoleScreenBufferInfo in hyper_console_interrupt";
+      con->stop = TRUE;
+      return;
+    }
+    
+    con->console_size = csbi.dwSize;
+    con->input_line_coord_y = csbi.dwCursorPosition.Y;
+    if(csbi.dwCursorPosition.X > 0) {
+      // might be in last line: scrolling and adjusting input_line_coord_y happens in update_output()
+      con->input_line_coord_y++; 
+    }
+    
+    update_output(con);
+    
+    hyperlink_system_start_input(con->console_size.X, con->input_line_coord_y);
+  }
+  else {
+    callback(callback_arg);
+  }
 }
 
 static void print_error(void) {

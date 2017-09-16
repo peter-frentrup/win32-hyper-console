@@ -103,6 +103,22 @@ HYPER_CONSOLE_API
 wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings);
 
 
+/** Interrupt the current `hyper_console_readline()`.
+   
+  \param callback     A function to execute while the current input is hidden. 
+                      This may print to console.
+  \param callback_arg The argument to pass to \a callback.
+  
+  The current input line and prompt will be hidden before calling \a callback and restored 
+  after that function returns (at the next empty line after the then current cursor position).
+  
+  If there is no current hyper_console_readline, \a callback will be called without pre- 
+  or post-processing.
+ */
+HYPER_CONSOLE_API
+void hyper_console_interrupt(void (*callback)(void*), void *callback_arg);
+
+
 /** Allocate a block of memory.
  */
 HYPER_CONSOLE_API

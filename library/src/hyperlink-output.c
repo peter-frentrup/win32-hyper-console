@@ -59,6 +59,7 @@ static void free_link_at(struct hyperlink_t **last_link);
 static void clean_old_links(struct hyperlink_collection_t *hc, int first_keep_line);
 static struct hyperlink_t *open_new_link(struct hyperlink_collection_t *hc);
 static void close_link(struct hyperlink_collection_t *hc);
+static void clear_links_after_cursor(struct hyperlink_collection_t *hc);
 static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t *title, int title_length);
 static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wchar_t *text, int text_length);
 static WORD set_open_link_color(struct hyperlink_collection_t *hc, WORD attribute);
@@ -285,6 +286,41 @@ static void close_link(struct hyperlink_collection_t *hc) {
     
   link->end_global_line = line;
   link->end_column      = column;
+}
+
+static void clear_links_after_cursor(struct hyperlink_collection_t *hc) {
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  int line;
+  int column;
+  struct hyperlink_t **link_ptr;
+  int skip_count;
+  
+  assert(hc != NULL);
+  
+  if(!GetConsoleScreenBufferInfo(hc->output_handle, &csbi))
+    return;
+  
+  console_scrollback_update(hc->scrollback, csbi.dwCursorPosition.Y);
+  if(!console_scollback_local_to_global(hc->scrollback, csbi.dwCursorPosition, &line, &column))
+    return;
+  
+  skip_count = hc->num_open_links;
+  link_ptr = &hc->last_link;
+  while(skip_count-- > 0) {
+    assert(*link_ptr != NULL);
+    
+    link_ptr = &(*link_ptr)->prev_link;
+  }
+  
+  while(*link_ptr) {
+    struct hyperlink_t *link = *link_ptr;
+    if(is_global_position_before(line, column, link->end_global_line, link->end_column)) {
+      deactivate_link(hc, link);
+      free_link_at(link_ptr);
+    }
+    else
+      link_ptr = &link->prev_link;
+  }
 }
 
 static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t *title, int title_length) {
@@ -967,6 +1003,17 @@ WORD hyper_console_set_link_color(WORD attribute) {
   LeaveCriticalSection(_cs_global_links);
   
   return old_color;
+}
+
+void hyperlink_system_clear_links_after_cursor(void) {
+  if(!_have_hyperlink_system)
+    return;
+  
+  EnterCriticalSection(_cs_global_links);
+  
+  clear_links_after_cursor(_global_links);
+  
+  LeaveCriticalSection(_cs_global_links);
 }
 
 BOOL hyperlink_system_handle_events(INPUT_RECORD *event) {
