@@ -66,7 +66,6 @@ struct console_input_t {
   int continuation_prompt_size;
   
   struct hyper_console_history_t *history;
-  int history_index;
   
   CHAR_INFO *output_buffer; // [output_size]
   int output_capacity;
@@ -1373,21 +1372,23 @@ static void cancel_navigate_history(struct console_input_t *con) {
   assert(con != NULL);
   
   console_history_set_future(con->history, NULL, 0);
-  con->history_index = console_history_count(con->history);
+  console_history_set_index(con->history, console_history_count(con->history));
   con->navigating_history = FALSE;
 }
 
 static void navigate_history(struct console_input_t *con, int delta) {
   const wchar_t *hist_text;
   int hist_text_length;
+  int index;
   
   assert(con != NULL);
   
-  hist_text = console_history_get(con->history, con->history_index + delta, &hist_text_length);
+  index = console_history_get_index(con->history);
+  hist_text = console_history_get(con->history, index + delta, &hist_text_length);
   if(!hist_text) {
     int count = console_history_count(con->history);
-    if(con->history_index + delta >= count) {
-      con->history_index = count; 
+    if(index + delta >= count) {
+      index = count; 
       delta = 0;
       
       hist_text = console_history_get_future(con->history, &hist_text_length);
@@ -1396,7 +1397,8 @@ static void navigate_history(struct console_input_t *con, int delta) {
       return;
   }
   
-  con->history_index += delta;
+  index += delta;
+  console_history_set_index(con->history, index);
   
   con->input_anchor = 0;
   con->input_pos = con->input_length;
@@ -1428,6 +1430,12 @@ static BOOL handle_history_key_down(struct console_input_t *con, const KEY_EVENT
       if(console_scroll_key(con->output_handle, er))
         return TRUE;
       navigate_history(con, +1);
+      return TRUE;
+      
+    case VK_RETURN:
+      handle_key_return(con);
+      if(!con->stop)
+        cancel_navigate_history(con);
       return TRUE;
   }
   
@@ -1714,7 +1722,7 @@ static void handle_key_down(struct console_input_t *con, const KEY_EVENT_RECORD 
       else {
         con->input_anchor = 0;
         con->input_pos = con->input_length;
-        con->history_index = console_history_count(con->history);
+        console_history_set_index(con->history, console_history_count(con->history));
         delete_selection_no_update(con);
         update_output(con);
       }
@@ -2286,7 +2294,6 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
     int text_length = 0;
     
     con->history = settings->history;
-    con->history_index = console_history_count(con->history);
     
     text = console_history_get_future(con->history, &text_length);
     if(text) {
@@ -2340,7 +2347,12 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
   
   if(!con->ignore_input_when_stopped) {
     wchar_t *result = con->input_text;
+    int index = console_history_get_index(con->history);
+    
     console_history_add(con->history, con->input_text, con->input_length);
+    
+    if(con->navigating_history)
+      console_history_set_index(con->history, index);
     
     if( con->need_more_input_predicate == default_multiline_need_more_input_predicate &&
         con->input_length > 0 &&

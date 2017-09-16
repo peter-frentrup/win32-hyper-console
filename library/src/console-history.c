@@ -18,6 +18,8 @@ struct hyper_console_history_t {
   
   wchar_t *future_entry; // 0-terminated
   int      future_entry_length;
+  
+  int current_index;
 };
 
 
@@ -186,4 +188,26 @@ void console_history_add(struct hyper_console_history_t *hist, const wchar_t *te
   
   hist->entries[hist->entries_count] = line;
   hist->entries_count++;
+  
+  hist->current_index = hist->entries_count;
+}
+
+int console_history_get_index(struct hyper_console_history_t *hist) {
+  if(!hist)
+    return 0;
+  
+  return hist->current_index;
+}
+
+void console_history_set_index(struct hyper_console_history_t *hist, int new_index) {
+  if(!hist)
+    return;
+  
+  if(new_index > hist->entries_count) 
+    new_index = hist->entries_count;
+  
+  if(new_index < 0)
+    new_index = 0;
+  
+  hist->current_index = new_index;
 }
