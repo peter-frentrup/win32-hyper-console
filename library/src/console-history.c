@@ -13,8 +13,8 @@ struct history_line_t {
 
 struct hyper_console_history_t {
   struct history_line_t **entries;
-  int capacity;
-  int count;
+  int entries_capacity;
+  int entries_count;
   
   wchar_t *future_entry; // 0-terminated
   int      future_entry_length;
@@ -42,7 +42,7 @@ void hyper_console_history_free(struct hyper_console_history_t *hist) {
   if(hist == NULL)
     return;
     
-  for(i = 0; i < hist->count; ++i)
+  for(i = 0; i < hist->entries_count; ++i)
     hyper_console_free_memory(hist->entries[i]);
     
   hyper_console_free_memory(hist->entries);
@@ -55,7 +55,7 @@ int console_history_count(struct hyper_console_history_t *hist) {
   if(hist == NULL)
     return 0;
     
-  return hist->count;
+  return hist->entries_count;
 }
 
 const wchar_t *console_history_get(struct hyper_console_history_t *hist, int index, int *length) {
@@ -67,7 +67,7 @@ const wchar_t *console_history_get(struct hyper_console_history_t *hist, int ind
     return NULL;
   }
   
-  if(index < 0 || index >= hist->count) {
+  if(index < 0 || index >= hist->entries_count) {
     if(length != NULL) {
       *length = 0;
     }
@@ -160,7 +160,7 @@ void console_history_add(struct hyper_console_history_t *hist, const wchar_t *te
     return;
     
   // Ignore duplicates. TODO: ignore old duplicates if GetConsoleHistoryInfo() says so.
-  prev_text = console_history_get(hist, hist->count - 1, &prev_length);
+  prev_text = console_history_get(hist, hist->entries_count - 1, &prev_length);
   if( prev_length == text_length &&
       memcmp(prev_text, text, sizeof(wchar_t) * text_length) == 0)
   {
@@ -169,9 +169,9 @@ void console_history_add(struct hyper_console_history_t *hist, const wchar_t *te
   
   if(!resize_array(
         (void**)&hist->entries,
-        &hist->capacity,
+        &hist->entries_capacity,
         sizeof(hist->entries[0]),
-        hist->count + 1))
+        hist->entries_count + 1))
   {
     return;
   }
@@ -184,6 +184,6 @@ void console_history_add(struct hyper_console_history_t *hist, const wchar_t *te
   memcpy(&line->content[0], text, text_length * sizeof(wchar_t));
   line->content[text_length] = L'\0';
   
-  hist->entries[hist->count] = line;
-  hist->count++;
+  hist->entries[hist->entries_count] = line;
+  hist->entries_count++;
 }
