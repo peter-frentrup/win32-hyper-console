@@ -1058,6 +1058,10 @@ static void show_help(void) {
   printf("\nYou can use keyboard shortcuts Ctrl+C, Ctrl+X, Ctrl+V to access the clipboard.\n");
 }
 
+static void show_help_callback(void *dummy) {
+  show_help();
+}
+
 static void handle_sigint(int sig) {
   signal(sig, handle_sigint);
   
@@ -1138,6 +1142,16 @@ static wchar_t **auto_completion(void *context, const wchar_t *buffer, int len, 
   return results;
 }
 
+static BOOL key_event_filter(void *context, const KEY_EVENT_RECORD *er) {
+  if(er->bKeyDown) {
+    if(er->wVirtualKeyCode == VK_F1) {
+      hyper_console_interrupt(show_help_callback, NULL);
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
 int main() {
   wchar_t *str = NULL;
   struct hyper_console_settings_t settings;
@@ -1149,6 +1163,7 @@ int main() {
   settings.need_more_input_predicate = need_more_input_predicate;
   settings.auto_completion = auto_completion;
   settings.line_continuation_prompt = L"...>";
+  settings.key_event_filter = key_event_filter;
   
   signal(SIGINT, handle_sigint);
   

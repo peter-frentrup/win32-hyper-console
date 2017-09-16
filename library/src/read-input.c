@@ -78,6 +78,7 @@ struct console_input_t {
   void *callback_context;
   BOOL (*need_more_input_predicate)(void *context, const wchar_t *buffer, int len, int cursor_pos);
   wchar_t **(*auto_completion)(void *context, const wchar_t *buffer, int len, int cursor_pos, int *completion_start, int *completion_end);
+  BOOL (*key_event_filter)(void *context, const KEY_EVENT_RECORD *er);
   
   int completion_pos;
   int completion_end;
@@ -201,6 +202,10 @@ static wchar_t **default_auto_completion(void *context, const wchar_t *buffer, i
   return NULL;
 }
 
+static BOOL default_key_event_filter(void *context, const KEY_EVENT_RECORD *er) {
+  return FALSE;
+}
+
 
 static BOOL init_console(struct console_input_t *con) {
   assert(con != NULL);
@@ -239,6 +244,7 @@ static BOOL init_console(struct console_input_t *con) {
   
   con->need_more_input_predicate = default_need_more_input_predicate;
   con->auto_completion = default_auto_completion;
+  con->key_event_filter = default_key_event_filter;
   
   return TRUE;
 }
@@ -1844,6 +1850,9 @@ static void handle_key_event(struct console_input_t *con, const KEY_EVENT_RECORD
   assert(con != NULL);
   assert(er != NULL);
   
+  if(con->key_event_filter(con->callback_context, er))
+    return;
+  
   if(er->bKeyDown)
     handle_key_down(con, er);
 }
@@ -2371,6 +2380,10 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
   
   if(HAVE_SETTINGS(settings, auto_completion) && settings->auto_completion) {
     con->auto_completion = settings->auto_completion;
+  }
+  
+  if(HAVE_SETTINGS(settings, key_event_filter) && settings->key_event_filter) {
+    con->key_event_filter = settings->key_event_filter;
   }
   
   init_buffer(con);

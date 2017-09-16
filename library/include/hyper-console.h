@@ -91,6 +91,13 @@ struct hyper_console_settings_t {
   /** Optional promt for second/third/... line in multiline mode.
    */
   const wchar_t *line_continuation_prompt;
+  
+  /** Optional pre-processor for any key events.
+      \param context  The value provided in \c callback_context.
+      \param er       The key event record.
+      \return Whether the event was handled and automatic handling should be suppressed.
+   */
+  BOOL (*key_event_filter)(void *context, const KEY_EVENT_RECORD *er);
 };
 
 /** Read a line of input
