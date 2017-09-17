@@ -2458,8 +2458,46 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
   return NULL;
 }
 
-BOOL is_handling_input(void) {
-  return get_current_input() != NULL;
+HYPER_CONSOLE_API
+const wchar_t *hyper_console_get_current_input(int *length) {
+  struct console_input_t *con = get_current_input();
+  
+  assert(length != NULL);
+  *length = 0;
+  
+  if(!con)
+    return NULL;
+  
+  *length = con->input_length;
+  con->input_text[con->input_length] = L'\0';
+  return con->input_text;
+}
+
+HYPER_CONSOLE_API
+void hyper_console_get_current_selection(int *position, int *anchor) {
+  struct console_input_t *con = get_current_input();
+  
+  assert(position != NULL);
+  assert(anchor != NULL);
+  
+  if(con) {
+    *position = con->input_pos;
+    *anchor = con->input_anchor;
+  }
+  else {
+    *position = 0;
+    *anchor = 0;
+  }
+}
+
+HYPER_CONSOLE_API
+void hyper_console_set_current_selection(int position, int anchor) {
+  struct console_input_t *con = get_current_input();
+  
+  if(!con)
+    return;
+  
+  reselect_input(con, position, anchor);
 }
 
 BOOL stop_current_input(BOOL do_abort, const wchar_t *opt_replace_input) {

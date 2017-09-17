@@ -3,10 +3,6 @@
 
 #include <windows.h>
 
-/** Test whether the current thread is calling read_input() at the moment.
- */
-BOOL is_handling_input(void);
-
 /** Tell the current read_input() loop to stop.
   
   \param do_abort Whether to return NULL from read_input().

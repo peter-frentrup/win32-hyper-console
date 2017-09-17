@@ -125,6 +125,37 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings);
 HYPER_CONSOLE_API
 void hyper_console_interrupt(void (*callback)(void*), void *callback_arg);
 
+/** Get the currently edited input text.
+  
+  \param length Pointer to an integer receiving the input buffer length. Must not be NULL.
+  \return The current input line if hyper_console_readline() is running in the current thread,
+          or NULL otherwise.
+  
+  The buffer returned by this function is owned by hyper-console. You must not modify it.
+ */
+HYPER_CONSOLE_API
+const wchar_t *hyper_console_get_current_input(int *length);
+
+/** Get the current input text selection range.
+  
+  \param position Pointer to an integer receiving the cursor position. Must not be NULL.
+  \param anchor   Pointer to an integer receiving the selection anchor. Must not be NULL.
+  
+  The selected text is betwwen \a position and \a anchor.
+ */
+HYPER_CONSOLE_API
+void hyper_console_get_current_selection(int *position, int *anchor);
+
+/** Get the current input text selection range.
+  
+  \param position The new cursor position.
+  \param anchor   The new selection anchor.
+  
+  Both, \a position and \a anchor will be clamped to 0..length_of_input.
+ */
+HYPER_CONSOLE_API
+void hyper_console_set_current_selection(int position, int anchor);
+
 
 /** Allocate a block of memory.
  */
