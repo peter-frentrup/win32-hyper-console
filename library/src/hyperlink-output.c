@@ -86,6 +86,7 @@ static void activate_all_links(struct hyperlink_collection_t *hc);
 static void deactivate_all_links(struct hyperlink_collection_t *hc);
 
 static BOOL hs_click(struct hyperlink_collection_t *hc, COORD local);
+static BOOL hs_get_hover_title(struct hyperlink_collection_t *hc, COORD local, wchar_t *buf, size_t buf_len);
 
 static void on_mouse_enter_link(struct hyperlink_collection_t *hc);
 static void on_mouse_leave_link(struct hyperlink_collection_t *hc);
@@ -728,6 +729,25 @@ static BOOL hs_click(struct hyperlink_collection_t *hc, COORD local) {
   return stop_current_input(FALSE, link->input_text);
 }
 
+static BOOL hs_get_hover_title(struct hyperlink_collection_t *hc, COORD local, wchar_t *buf, size_t buf_len) {
+  struct hyperlink_t *link = find_link(hc, local);
+  
+  if(!link)
+    return FALSE;
+  
+  if(!buf || buf_len == 0)
+    return TRUE;
+  
+  if(!link->title) {
+    *buf = L'\0';
+    return TRUE;
+  }
+  
+  wcsncpy(buf, link->title, buf_len);
+  buf[buf_len - 1] = L'\0';
+  return TRUE;
+}
+
 static void on_mouse_enter_link(struct hyperlink_collection_t *hc) {
   assert(hc != NULL);
   assert(hc->mouse_over_link != NULL);
@@ -1136,6 +1156,25 @@ BOOL hyperlink_system_click(COORD local) {
   LeaveCriticalSection(_cs_global_links);
   
   return handled;
+}
+
+BOOL hyperlink_system_get_hover_title(COORD local, wchar_t *buf, size_t buf_len) {
+  BOOL result;
+  
+  assert(buf != NULL || buf_len == 0);
+  if(buf && buf_len > 0) 
+    *buf = L'\0';
+  
+  if(!_have_hyperlink_system)
+    return 0;
+  
+  EnterCriticalSection(_cs_global_links);
+  
+  result = hs_get_hover_title(_global_links, local, buf, buf_len);
+  
+  LeaveCriticalSection(_cs_global_links);
+  
+  return result;
 }
 
 BOOL hyperlink_system_handle_events(INPUT_RECORD *event) {

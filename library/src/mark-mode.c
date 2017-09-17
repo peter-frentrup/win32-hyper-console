@@ -46,6 +46,8 @@ struct console_mark_t {
 };
 
 static BOOL have_selected_output(struct console_mark_t *cm);
+static void make_inclusive_rect(SMALL_RECT *rect, COORD p1, COORD p2);
+static void set_selection_link_title(struct console_mark_t *cm);
 static void reselect_output(struct console_mark_t *cm, COORD pos, COORD anchor);
 
 static void move_selection_left(struct console_mark_t *cm, BOOL fix_anchor, BOOL jump_word);
@@ -56,6 +58,7 @@ static void move_selection_down(struct console_mark_t *cm, BOOL fix_anchor);
 static wchar_t *cat_console_line(struct console_mark_t *cm, wchar_t *buffer, wchar_t *buffer_end, COORD start, int length);
 static void copy_output_to_clipboard(struct console_mark_t *cm);
 
+static void set_mark_mode_title(struct console_mark_t *cm, const wchar_t *str);
 static void start_mark_mode(struct console_mark_t *cm);
 
 static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECORD *er);
@@ -78,6 +81,24 @@ static void make_inclusive_rect(SMALL_RECT *rect, COORD p1, COORD p2) {
   rect->Right  = MAX(p1.X, p2.X) + 1;
   rect->Top    = MIN(p1.Y, p2.Y);
   rect->Bottom = MAX(p1.Y, p2.Y) + 1;
+}
+
+static void set_selection_link_title(struct console_mark_t *cm) {
+  wchar_t buf[256];
+  
+  assert(cm != NULL);
+  
+  if(!cm->active)
+    return;
+  
+  if(!have_selected_output(cm)) {
+    if(hyperlink_system_get_hover_title(cm->pos, buf, sizeof(buf) / sizeof(buf[0]))) {
+      set_mark_mode_title(cm, buf);
+      return;
+    }
+  }
+  
+  set_mark_mode_title(cm, cm->oritinal_title);
 }
 
 static void reselect_output(struct console_mark_t *cm, COORD pos, COORD anchor) {
@@ -103,7 +124,7 @@ static void reselect_output(struct console_mark_t *cm, COORD pos, COORD anchor) 
     if(cm->was_block_mode) {
       SMALL_RECT empty = {0};
       SMALL_RECT old_rect;
-    
+      
       make_inclusive_rect(&old_rect, cm->anchor, cm->pos);
       
       console_reinvert_colors_rect(cm->output_handle, &old_rect, &empty);
@@ -125,7 +146,7 @@ static void reselect_output(struct console_mark_t *cm, COORD pos, COORD anchor) 
 //    pos.Y--;
 //    pos.X = cm->console_size.X - 1;
 //  }
-   
+
   if(GetConsoleScreenBufferInfo(cm->output_handle, &csbi)) {
     if(csbi.dwCursorPosition.X != pos.X || csbi.dwCursorPosition.Y != pos.Y) {
       SetConsoleCursorPosition(cm->output_handle, pos);
@@ -136,6 +157,7 @@ static void reselect_output(struct console_mark_t *cm, COORD pos, COORD anchor) 
   }
   
   cm->follow_cursor = FALSE;
+  set_selection_link_title(cm);
 }
 
 
@@ -301,7 +323,7 @@ static wchar_t *get_selection_lines(struct console_mark_t *cm, int *total_length
     total_length = 0;
     return NULL;
   }
-    
+  
   s = str;
   while(start.Y < end.Y) {
     s = cat_console_line(cm, s, str + max_length, start, cm->console_size.X - start.X);
@@ -323,7 +345,7 @@ static wchar_t *get_selection_lines(struct console_mark_t *cm, int *total_length
 
 /** Get the block-mode selected text.
 
-  \return The rectangle block of lines, trimmed ad line ends. 
+  \return The rectangle block of lines, trimmed ad line ends.
   Should be freed with hyper_console_free_memory(). NULL on error.
  */
 static wchar_t *get_selection_block_lines(struct console_mark_t *cm, int *total_length) {
@@ -354,7 +376,7 @@ static wchar_t *get_selection_block_lines(struct console_mark_t *cm, int *total_
   
   s = str;
   pos.X = start.X;
-  for(pos.Y = start.Y;pos.Y <= end.Y;pos.Y++) {
+  for(pos.Y = start.Y; pos.Y <= end.Y; pos.Y++) {
     DWORD dummy_read_count;
     wchar_t *next;
     
@@ -364,12 +386,12 @@ static wchar_t *get_selection_block_lines(struct console_mark_t *cm, int *total_
       line_length,
       pos,
       &dummy_read_count);
-    
+      
     next = s + line_length;
     if(pos.Y < end.Y) {
       while(next != s && next[-1] == L' ')
         --next;
-       
+        
       *next++ = L'\r';
       *next++ = L'\n';
     }
@@ -398,7 +420,7 @@ static void copy_output_to_clipboard(struct console_mark_t *cm) {
     
   if(!str)
     return;
-  
+    
   assert(length >= 0);
   
   if(OpenClipboard(NULL)) {
@@ -423,6 +445,18 @@ static void copy_output_to_clipboard(struct console_mark_t *cm) {
   hyper_console_free_memory(str);
 }
 
+static void set_mark_mode_title(struct console_mark_t *cm, const wchar_t *str) {
+  assert(cm != NULL);
+  
+  if(str) {
+    wchar_t buffer[256 + 20];
+    
+    StringCbPrintfW(buffer, sizeof(buffer), L"Mark Mode %s", str);
+    SetConsoleTitleW(buffer);
+  }
+  else
+    SetConsoleTitleW(L"Mark mode");
+}
 
 static void start_mark_mode(struct console_mark_t *cm) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -437,16 +471,10 @@ static void start_mark_mode(struct console_mark_t *cm) {
   
   if(cm->oritinal_title == NULL) {
     cm->oritinal_title = hyper_console_allocate_memory(sizeof(wchar_t) * 256);
-    if(cm->oritinal_title) {
-      wchar_t buffer[256 + 20];
-      
+    if(cm->oritinal_title)
       GetConsoleTitleW(cm->oritinal_title, 256);
       
-      StringCbPrintfW(buffer, sizeof(buffer), L"Mark Mode %s", cm->oritinal_title);
-      SetConsoleTitleW(buffer);
-    }
-    else
-      SetConsoleTitleW(L"Mark mode");
+    set_mark_mode_title(cm, cm->oritinal_title);
   }
   
   cci.bVisible = TRUE;
@@ -459,7 +487,7 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
   assert(cm != NULL);
   assert(er != NULL);
   
-  if(!er->bKeyDown) 
+  if(!er->bKeyDown)
     return cm->active;
     
   switch(er->wVirtualKeyCode) {
@@ -512,10 +540,10 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
             er->dwControlKeyState & SHIFT_PRESSED);
         }
         return TRUE;
-      
+        
       case VK_PRIOR:
       case VK_NEXT:
-       return console_scroll_key(cm->output_handle, er);
+        return console_scroll_key(cm->output_handle, er);
         
       case 'A': // Ctrl+A
         if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
@@ -537,17 +565,17 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
           copy_output_to_clipboard(cm);
         else
           console_alert(cm->output_handle);
-        
+          
         cm->stop = TRUE;
         return TRUE;
-       
+        
       case VK_INSERT: // Ctrl+Ins = copy
         if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
           if(have_selected_output(cm))
             copy_output_to_clipboard(cm);
           else
             console_alert(cm->output_handle);
-          
+            
           cm->stop = TRUE;
           return TRUE;
         }
@@ -559,7 +587,7 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
             copy_output_to_clipboard(cm);
           else
             console_alert(cm->output_handle);
-          
+            
           cm->stop = TRUE;
           return TRUE;
         }
@@ -569,7 +597,7 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
         if(er->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) {
           if(have_selected_output(cm))
             copy_output_to_clipboard(cm);
-          
+            
           console_alert(cm->output_handle);
           cm->stop = TRUE;
           return TRUE;
@@ -582,13 +610,13 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
           return TRUE;
         }
         break;
-      
+        
       case VK_BACK:
       case VK_DELETE:
         console_alert(cm->output_handle);
         cm->stop = TRUE;
         return TRUE;
-      
+        
       case VK_SPACE:
         if(!have_selected_output(cm)) {
           if(hyperlink_system_click(cm->pos)) {
@@ -614,7 +642,7 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
   
   if(cm->active)
     console_alert(cm->output_handle);
-  
+    
   cm->stop = TRUE;
   return FALSE;
 }
@@ -701,7 +729,7 @@ static BOOL run_mark_mode(struct console_mark_t *cm, INPUT_RECORD *event) {
     
     if(!cm->active || cm->stop)
       return TRUE;
-    
+      
     if(!ReadConsoleInputW(cm->input_handle, event, 1, &num_read) || num_read < 1)
       return TRUE;
       
@@ -715,7 +743,7 @@ static BOOL run_mark_mode(struct console_mark_t *cm, INPUT_RECORD *event) {
         filter = get_selection_block_lines(cm, &length);
       else
         filter = get_selection_lines(cm, &length);
-      
+        
       console_handle_search_mode(cm->input_handle, cm->output_handle, event, filter);
       
       hyper_console_free_memory(filter);
