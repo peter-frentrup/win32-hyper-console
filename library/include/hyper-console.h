@@ -98,6 +98,18 @@ struct hyper_console_settings_t {
       \return Whether the event was handled and automatic handling should be suppressed.
    */
   BOOL (*key_event_filter)(void *context, const KEY_EVENT_RECORD *er);
+  
+  /** Optional tab width.
+      
+      Defaults to 8. The value 0 is interpreted as the default (8).
+   */
+  int tab_width;
+  
+  /** Optional first tab position.
+      
+      Defaults to 0.
+   */
+  int first_tab_column;
 };
 
 /** Read a line of input

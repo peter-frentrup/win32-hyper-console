@@ -92,6 +92,9 @@ struct console_input_t {
   DWORD old_input_mode;
   DWORD old_output_mode;
   
+  int tab_width;
+  int first_tab_column;
+  
   unsigned use_position_dependent_coloring: 1;
   unsigned have_colored_fences: 1;
   unsigned multiline_mode: 1;
@@ -245,6 +248,8 @@ static BOOL init_console(struct console_input_t *con) {
   con->need_more_input_predicate = default_need_more_input_predicate;
   con->auto_completion = default_auto_completion;
   con->key_event_filter = default_key_event_filter;
+  
+  con->tab_width = 8;
   
   return TRUE;
 }
@@ -595,20 +600,29 @@ static BOOL insert_glyphs(struct console_input_t *con, int pos, const CHAR_INFO 
 static BOOL expand_glyphs(struct console_input_t *con) {
   int bufpos;
   int console_width;
-  int tab_width = 8;
+  int tab_width;
+  int tab_start;
   
   assert(con != NULL);
   if(con->error)
     return FALSE;
-    
+  
   console_width = con->console_size.X;
   assert(console_width > 0);
+  
+  tab_width = con->tab_width;
+  tab_start = con->first_tab_column;
   
   if(tab_width > console_width)
     tab_width = console_width / 2;
     
   if(tab_width < 1)
     tab_width = 1;
+  
+  if(tab_start < 0)
+    tab_start = 0;
+  else
+    tab_start = tab_start % tab_width;
     
   for(bufpos = con->prompt_size; bufpos < con->output_size; ++bufpos) {
     if(con->multiline_mode && con->output_buffer[bufpos].Char.UnicodeChar == L'\n') {
@@ -629,7 +643,12 @@ static BOOL expand_glyphs(struct console_input_t *con) {
     
     if(con->output_buffer[bufpos].Char.UnicodeChar == L'\t') {
       int column = bufpos % console_width;
-      int tabstop = ((column / tab_width) + 1) * tab_width;
+      int tabstop;
+      
+      if(column < tab_start)
+        tabstop = tab_start;
+      else
+        tabstop = tab_start + (((column - tab_start) / tab_width) + 1) * tab_width;
       
       if(tabstop > console_width)
         tabstop = console_width;
@@ -2400,6 +2419,14 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
   
   if(HAVE_SETTINGS(settings, key_event_filter) && settings->key_event_filter) {
     con->key_event_filter = settings->key_event_filter;
+  }
+  
+  if(HAVE_SETTINGS(settings, tab_width) && settings->tab_width) {
+    con->tab_width = settings->tab_width;
+  }
+  
+  if(HAVE_SETTINGS(settings, first_tab_column) && settings->first_tab_column) {
+    con->first_tab_column = settings->first_tab_column;
   }
   
   init_buffer(con);

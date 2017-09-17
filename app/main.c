@@ -1164,6 +1164,7 @@ int main() {
   settings.auto_completion = auto_completion;
   settings.line_continuation_prompt = L"...>";
   settings.key_event_filter = key_event_filter;
+  settings.first_tab_column = 4;
   
   signal(SIGINT, handle_sigint);
   
