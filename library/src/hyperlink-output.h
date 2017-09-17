@@ -12,6 +12,8 @@ void hyperlink_system_paste_and_activate_links(struct dangling_hyperlinks_t *lin
 
 BOOL hyperlink_system_local_to_global(COORD local, int *line, int *column);
 
+BOOL hyperlink_system_click(COORD local);
+
 BOOL hyperlink_system_handle_events(INPUT_RECORD *event);
 
 void hyperlink_system_start_input(int console_width, int pre_input_lines);

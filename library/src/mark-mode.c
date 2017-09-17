@@ -5,6 +5,7 @@
 #include "console-buffer-io.h"
 #include "debug.h"
 #include "memory-util.h"
+#include "hyperlink-output.h"
 #include "search-mode.h"
 
 #include <assert.h>
@@ -586,6 +587,16 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
       case VK_DELETE:
         console_alert(cm->output_handle);
         cm->stop = TRUE;
+        return TRUE;
+      
+      case VK_SPACE:
+        if(!have_selected_output(cm)) {
+          if(hyperlink_system_click(cm->pos)) {
+            cm->stop = TRUE;
+            return TRUE;
+          }
+        }
+        console_alert(cm->output_handle);
         return TRUE;
     }
   }

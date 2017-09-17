@@ -85,6 +85,8 @@ static void deactivate_link(struct hyperlink_collection_t *hc, struct hyperlink_
 static void activate_all_links(struct hyperlink_collection_t *hc);
 static void deactivate_all_links(struct hyperlink_collection_t *hc);
 
+static BOOL hs_click(struct hyperlink_collection_t *hc, COORD local);
+
 static void on_mouse_enter_link(struct hyperlink_collection_t *hc);
 static void on_mouse_leave_link(struct hyperlink_collection_t *hc);
 static BOOL set_mouse_over_link(struct hyperlink_collection_t *hc, struct hyperlink_t *link);
@@ -717,6 +719,14 @@ static void deactivate_all_links(struct hyperlink_collection_t *hc) {
   }
 }
 
+static BOOL hs_click(struct hyperlink_collection_t *hc, COORD local) {
+  struct hyperlink_t *link = find_link(hc, local);
+  
+  if(!link)
+    return FALSE;
+    
+  return stop_current_input(FALSE, link->input_text);
+}
 
 static void on_mouse_enter_link(struct hyperlink_collection_t *hc) {
   assert(hc != NULL);
@@ -1111,6 +1121,21 @@ BOOL hyperlink_system_local_to_global(COORD local, int *line, int *column) {
   LeaveCriticalSection(_cs_global_links);
   
   return result;
+}
+
+BOOL hyperlink_system_click(COORD local) {
+  BOOL handled;
+  
+  if(!_have_hyperlink_system)
+    return FALSE;
+  
+  EnterCriticalSection(_cs_global_links);
+  
+  handled = hs_click(_global_links, local);
+  
+  LeaveCriticalSection(_cs_global_links);
+  
+  return handled;
 }
 
 BOOL hyperlink_system_handle_events(INPUT_RECORD *event) {
