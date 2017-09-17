@@ -87,6 +87,7 @@ static void deactivate_all_links(struct hyperlink_collection_t *hc);
 
 static BOOL hs_click(struct hyperlink_collection_t *hc, COORD local);
 static BOOL hs_get_hover_title(struct hyperlink_collection_t *hc, COORD local, wchar_t *buf, size_t buf_len);
+static COORD hs_find_next_link(struct hyperlink_collection_t *hc, COORD pos, BOOL forward);
 
 static void on_mouse_enter_link(struct hyperlink_collection_t *hc);
 static void on_mouse_leave_link(struct hyperlink_collection_t *hc);
@@ -166,8 +167,8 @@ void hyperlink_system_move_links(struct dangling_hyperlinks_t *links, int delta_
   struct hyperlink_t *link;
   
   for(link = (struct hyperlink_t*)links; link != NULL; link = link->prev_link) {
-    link->start_global_line+= delta_lines;
-    link->end_global_line+= delta_lines;
+    link->start_global_line += delta_lines;
+    link->end_global_line += delta_lines;
   }
 }
 
@@ -216,11 +217,11 @@ static void clean_old_links(struct hyperlink_collection_t *hc, int first_keep_li
       hc->pressed_link = NULL;
     }
     
-    debug_printf(L"clean link %s in line %d < %d\n", 
-      (*link_ptr)->title, 
-      (*link_ptr)->start_global_line, 
-      first_keep_line);
-    
+    debug_printf(L"clean link %s in line %d < %d\n",
+                 (*link_ptr)->title,
+                 (*link_ptr)->start_global_line,
+                 first_keep_line);
+                 
     free_link_at(link_ptr);
   }
 }
@@ -327,11 +328,11 @@ static struct dangling_hyperlinks_t *cut_links_after_cursor(struct hyperlink_col
   
   if(!GetConsoleScreenBufferInfo(hc->output_handle, &csbi))
     return NULL;
-  
+    
   console_scrollback_update(hc->scrollback, csbi.dwCursorPosition.Y);
   if(!console_scollback_local_to_global(hc->scrollback, csbi.dwCursorPosition, &line, &column))
     return NULL;
-  
+    
   skip_count = hc->num_open_links;
   link_ptr = &hc->last_link;
   while(skip_count-- > 0) {
@@ -370,7 +371,7 @@ static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t
     
     if(ulen >= INT_MAX)
       return;
-    
+      
     title_length = (int)ulen;
   }
   
@@ -383,9 +384,9 @@ static void set_open_link_title(struct hyperlink_collection_t *hc, const wchar_t
     link->title = hyper_console_allocate_memory((title_length + 1) * sizeof(wchar_t));
     if(link->title) {
       memcpy(
-          link->title,
-          title,
-          title_length * sizeof(wchar_t));
+        link->title,
+        title,
+        title_length * sizeof(wchar_t));
       link->title[title_length] = L'\0';
     }
   }
@@ -408,7 +409,7 @@ static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wc
     
     if(ulen >= INT_MAX)
       return;
-    
+      
     text_length = (int)ulen;
   }
   
@@ -421,9 +422,9 @@ static void set_open_link_input_text(struct hyperlink_collection_t *hc, const wc
     link->input_text = hyper_console_allocate_memory((text_length + 1) * sizeof(wchar_t));
     if(link->input_text) {
       memcpy(
-          link->input_text,
-          text,
-          text_length * sizeof(wchar_t));
+        link->input_text,
+        text,
+        text_length * sizeof(wchar_t));
       link->input_text[text_length] = L'\0';
     }
   }
@@ -463,7 +464,7 @@ static WORD set_open_link_color(struct hyperlink_collection_t *hc, WORD attribut
   
   if(hc->num_failed_open_links > 0)
     return hc->attr_link;
-  
+    
   link = hc->last_link;
   assert(hc->num_open_links > 0);
   assert(link != NULL);
@@ -516,9 +517,9 @@ static struct hyperlink_t *find_link(struct hyperlink_collection_t *hc, COORD po
   @return The screen-buffer length of the link. Non-positive on error.
  */
 static int find_link_visual_position(
-    struct hyperlink_collection_t  *hc,
-    const struct hyperlink_t       *link,
-    COORD                          *position
+  struct hyperlink_collection_t  *hc,
+  const struct hyperlink_t       *link,
+  COORD                          *position
 ) {
   COORD start;
   COORD end;
@@ -734,10 +735,10 @@ static BOOL hs_get_hover_title(struct hyperlink_collection_t *hc, COORD local, w
   
   if(!link)
     return FALSE;
-  
+    
   if(!buf || buf_len == 0)
     return TRUE;
-  
+    
   if(!link->title) {
     *buf = L'\0';
     return TRUE;
@@ -746,6 +747,49 @@ static BOOL hs_get_hover_title(struct hyperlink_collection_t *hc, COORD local, w
   wcsncpy(buf, link->title, buf_len);
   buf[buf_len - 1] = L'\0';
   return TRUE;
+}
+
+static COORD hs_find_next_link(struct hyperlink_collection_t *hc, COORD pos, BOOL forward) {
+  struct hyperlink_t *link;
+  struct hyperlink_t *best_below = NULL;
+  struct hyperlink_t *best_above = NULL;
+  struct hyperlink_t *topmost = NULL;
+  struct hyperlink_t *bottomost = NULL;
+  int line, column;
+  
+  assert(hc != NULL);
+  
+  if(!console_scollback_local_to_global(hc->scrollback, pos, &line, &column))
+    return pos;
+    
+  for(link = hc->last_link; link != NULL; link = link->prev_link) {
+    if(link->start_global_line == line && link->start_column == column)
+      continue;
+    if(is_global_position_before(line, column, link->start_global_line, link->start_column)) {
+      if(!best_below || is_global_position_before(link->start_global_line, link->start_column, best_below->start_global_line, best_below->start_column))
+        best_below = link;
+    }
+    else if(is_global_position_before(link->end_global_line, link->end_column, line, column)) {
+      if(!best_above || is_global_position_before(best_above->start_global_line, best_above->start_column, link->start_global_line, link->start_column))
+        best_above = link;
+    }
+    
+    if(!topmost || is_global_position_before(link->start_global_line, link->start_column, topmost->start_global_line, topmost->start_column))
+      topmost = link;
+      
+    if(!bottomost || is_global_position_before(bottomost->start_global_line, bottomost->start_column, link->start_global_line, link->start_column))
+      bottomost = link;
+  }
+  
+  if(forward)
+    link = best_below ? best_below : topmost;
+  else
+    link = best_above ? best_above : bottomost;
+    
+  if(link)
+    console_scollback_global_to_local(hc->scrollback, link->start_global_line, link->start_column, &pos);
+    
+  return pos;
 }
 
 static void on_mouse_enter_link(struct hyperlink_collection_t *hc) {
@@ -789,7 +833,7 @@ static BOOL hs_handle_lbutton_down(struct hyperlink_collection_t *hc, const MOUS
   
   if(er->dwControlKeyState & SHIFT_PRESSED)
     return FALSE;
-  
+    
   set_mouse_over_link(hc, find_link(hc, er->dwMousePosition));
   
   if(hc->pressed_link && hc->pressed_link != hc->mouse_over_link)
@@ -812,7 +856,7 @@ static BOOL hs_handle_mouse_up(struct hyperlink_collection_t *hc, const MOUSE_EV
   if(er->dwButtonState == 0) {
     if(hc->pressed_link) {
       struct hyperlink_t *link = find_link(hc, er->dwMousePosition);
-    
+      
       if(link == hc->pressed_link && hc->pressed_link->input_text) {
         if(!stop_current_input(FALSE, hc->pressed_link->input_text)) {
           // beep
@@ -834,10 +878,10 @@ static BOOL hs_handle_mouse_move(struct hyperlink_collection_t *hc, const MOUSE_
   
   if(er->dwControlKeyState & SHIFT_PRESSED)
     return FALSE;
-  
+    
   if(er->dwButtonState == 0)
     return set_mouse_over_link(hc, find_link(hc, er->dwMousePosition));
-  
+    
   if(hc->pressed_link) {
     struct hyperlink_t *link = find_link(hc, er->dwMousePosition);
     
@@ -950,14 +994,14 @@ static void hs_start_input(struct hyperlink_collection_t *hc, int console_width,
   
   if(pre_input_lines < 0)
     pre_input_lines = 0;
-  
+    
   /* TODO: read_input should be able to state that it knows, that the local line pre_input_lines
-     is some particular global line, so we don't whipe out all links in case the old_lines are not 
+     is some particular global line, so we don't whipe out all links in case the old_lines are not
      fully visible any more.
-     (That happens on Windows < 10 when first reducing the console width, thus cutting off lines, 
-     and then increasing it again, because we do not cut of the old_lines in order to 
+     (That happens on Windows < 10 when first reducing the console width, thus cutting off lines,
+     and then increasing it again, because we do not cut of the old_lines in order to
      allow detecting line-unwrapping in Windows 10)
-     
+  
      For non-wrapping consoles, not calling console_scrollback_update() here would be best.
    */
   console_scrollback_update(hc->scrollback, pre_input_lines);
@@ -988,41 +1032,41 @@ static void hs_print_debug_info(struct hyperlink_collection_t *hc) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   COORD pos;
   int link_count = 0;
-  
+
   assert(hc != NULL);
-  
+
   if(!GetConsoleScreenBufferInfo(hc->output_handle, &csbi)) {
     fprintf(stderr, "GetConsoleScreenBufferInfo failed\n");
     return;
   }
-  
+
   struct hyperlink_t *link = hc->last_link;
   while(link) {
     ++link_count;
     link = link->prev_link;
   }
-  
+
   fprintf(stderr, "Number of hyperlinks: %d\n",
       link_count);
-  
+
   fprintf(stderr, "Screen buffer %d lines x %d columns\n",
-      (int)csbi.dwSize.Y, 
+      (int)csbi.dwSize.Y,
       (int)csbi.dwSize.X);
   fprintf(stderr, "Window at %d:%d size %d lines x %d columns\n",
-      (int)csbi.srWindow.Top, 
+      (int)csbi.srWindow.Top,
       (int)csbi.srWindow.Left,
       (int)csbi.srWindow.Bottom - csbi.srWindow.Top + 1,
       (int)csbi.srWindow.Right - csbi.srWindow.Left + 1);
   fprintf(stderr, "Cursor at %d:%d\n",
       (int)csbi.dwCursorPosition.Y,
       (int)csbi.dwCursorPosition.X);
-  
+
   pos = csbi.dwCursorPosition;
   pos.X = 0;
   while(pos.Y >= 0) {
     int line;
     int column;
-    
+
     if(console_scollback_local_to_global(hc->scrollback, pos, &line, &column)) {
       fprintf(stderr, "Last known global position is %d:%d (local %d:%d)\n",
           line,
@@ -1031,10 +1075,10 @@ static void hs_print_debug_info(struct hyperlink_collection_t *hc) {
           (int)pos.X);
       break;
     }
-    
+
     --pos.Y;
   }
-  
+
   if(pos.Y < 0) {
     fprintf(stderr, "No known global position\n");
   }
@@ -1099,7 +1143,7 @@ struct dangling_hyperlinks_t *hyperlink_system_cut_links_after_cursor(void) {
   
   if(!_have_hyperlink_system)
     return NULL;
-  
+    
   EnterCriticalSection(_cs_global_links);
   
   result = cut_links_after_cursor(_global_links);
@@ -1133,7 +1177,7 @@ BOOL hyperlink_system_local_to_global(COORD local, int *line, int *column) {
   
   if(!_have_hyperlink_system)
     return FALSE;
-  
+    
   EnterCriticalSection(_cs_global_links);
   
   result = hs_local_to_global(_global_links, local, line, column);
@@ -1148,7 +1192,7 @@ BOOL hyperlink_system_click(COORD local) {
   
   if(!_have_hyperlink_system)
     return FALSE;
-  
+    
   EnterCriticalSection(_cs_global_links);
   
   handled = hs_click(_global_links, local);
@@ -1162,12 +1206,12 @@ BOOL hyperlink_system_get_hover_title(COORD local, wchar_t *buf, size_t buf_len)
   BOOL result;
   
   assert(buf != NULL || buf_len == 0);
-  if(buf && buf_len > 0) 
+  if(buf && buf_len > 0)
     *buf = L'\0';
-  
+    
   if(!_have_hyperlink_system)
     return 0;
-  
+    
   EnterCriticalSection(_cs_global_links);
   
   result = hs_get_hover_title(_global_links, local, buf, buf_len);
@@ -1177,12 +1221,25 @@ BOOL hyperlink_system_get_hover_title(COORD local, wchar_t *buf, size_t buf_len)
   return result;
 }
 
+COORD hyperlink_system_find_next_link(COORD pos, BOOL forward) {
+  if(!_have_hyperlink_system)
+    return pos;
+    
+  EnterCriticalSection(_cs_global_links);
+  
+  pos = hs_find_next_link(_global_links, pos, forward);
+  
+  LeaveCriticalSection(_cs_global_links);
+  
+  return pos;
+}
+
 BOOL hyperlink_system_handle_events(INPUT_RECORD *event) {
   BOOL handled;
   
   if(!_have_hyperlink_system)
     return FALSE;
-  
+    
   EnterCriticalSection(_cs_global_links);
   
   handled = hs_handle_events(_global_links, event);
@@ -1218,11 +1275,11 @@ void hyperlink_system_end_input(void) {
 void hyperlink_system_print_debug_info(void) {
   if(!_have_hyperlink_system)
     return;
-    
+
   EnterCriticalSection(_cs_global_links);
-  
+
   hs_print_debug_info(_global_links);
-  
+
   LeaveCriticalSection(_cs_global_links);
 }
 */

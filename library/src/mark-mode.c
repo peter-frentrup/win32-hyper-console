@@ -55,6 +55,8 @@ static void move_selection_right(struct console_mark_t *cm, BOOL fix_anchor, BOO
 static void move_selection_up(struct console_mark_t *cm, BOOL fix_anchor);
 static void move_selection_down(struct console_mark_t *cm, BOOL fix_anchor);
 
+static void goto_next_link(struct console_mark_t *cm, BOOL forward);
+
 static wchar_t *cat_console_line(struct console_mark_t *cm, wchar_t *buffer, wchar_t *buffer_end, COORD start, int length);
 static void copy_output_to_clipboard(struct console_mark_t *cm);
 
@@ -235,7 +237,19 @@ static void move_selection_down(struct console_mark_t *cm, BOOL fix_anchor) {
   reselect_output(cm, new_pos, fix_anchor ? cm->anchor : new_pos);
 }
 
-
+static void goto_next_link(struct console_mark_t *cm, BOOL forward) {
+  COORD pos;
+  
+  assert(cm != NULL);
+  
+  pos = hyperlink_system_find_next_link(cm->pos, forward);
+  if(pos.X == cm->pos.X && pos.Y == cm->pos.Y) {
+    console_alert(cm->output_handle);
+    return;
+  }
+  
+  reselect_output(cm, pos, pos);
+}
 
 static wchar_t *cat_console_line(
   struct console_mark_t *cm,
@@ -625,6 +639,11 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
           }
         }
         console_alert(cm->output_handle);
+        return TRUE;
+      
+      case VK_TAB:
+        cm->follow_cursor = TRUE;
+        goto_next_link(cm, (er->dwControlKeyState & SHIFT_PRESSED) == 0);
         return TRUE;
     }
   }
