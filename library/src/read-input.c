@@ -1990,10 +1990,17 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
     (int)csbi.dwCursorPosition.Y,
     (int)csbi.dwCursorPosition.X,
     con->prompt_size + con->input_pos);
+  
+  if( csbi.dwSize.X == con->console_size.X && 
+      csbi.dwSize.Y == con->console_size.Y)
+  {
+    // Windows 10 sends spurious WINDOW_BUFFER_SIZE_EVENT when scolling via mouse wheel.
+    return;
+  }
     
   con->console_size = csbi.dwSize;
   
-  if(csbi.dwCursorPosition.Y != con->last_cursor_pos.Y || con->last_cursor_pos.X != con->last_cursor_pos.X) {
+  if(csbi.dwCursorPosition.Y != con->last_cursor_pos.Y || csbi.dwCursorPosition.X != con->last_cursor_pos.X) {
     int linear_cursor_pos = con->prompt_size + con->input_pos;
     
     int lines = linear_cursor_pos / csbi.dwSize.X;
