@@ -464,16 +464,31 @@ static void copy_output_to_clipboard(struct console_mark_t *cm) {
 }
 
 static void set_mark_mode_title(struct console_mark_t *cm, const wchar_t *str) {
+  wchar_t mark_mode_translation[40];
+  HMODULE conhost_exe;
+  BOOL found_translation = FALSE;
+  
   assert(cm != NULL);
+  
+  conhost_exe = LoadLibraryExW(L"conhost.exe", NULL, LOAD_LIBRARY_AS_DATAFILE);
+  if(conhost_exe) {
+    int len = LoadStringW(conhost_exe, 4108, mark_mode_translation, sizeof(mark_mode_translation) / sizeof(wchar_t));
+    found_translation = len > 0 && len < sizeof(mark_mode_translation) / sizeof(wchar_t);
+
+    FreeLibrary(conhost_exe);
+  }
+  
+  if(!found_translation)
+    StringCbCopyW(mark_mode_translation, sizeof(mark_mode_translation), L"Mark mode");
   
   if(str) {
     wchar_t buffer[256 + 20];
     
-    StringCbPrintfW(buffer, sizeof(buffer), L"Mark Mode %s", str);
+    StringCbPrintfW(buffer, sizeof(buffer), L"%s %s", mark_mode_translation, str);
     SetConsoleTitleW(buffer);
   }
   else
-    SetConsoleTitleW(L"Mark mode");
+    SetConsoleTitleW(mark_mode_translation);
 }
 
 static void start_mark_mode(struct console_mark_t *cm) {
