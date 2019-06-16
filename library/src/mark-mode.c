@@ -93,11 +93,9 @@ static void set_selection_link_title(struct console_mark_t *cm) {
   if(!cm->active)
     return;
   
-  if(!have_selected_output(cm)) {
-    if(hyperlink_system_get_hover_title(cm->pos, buf, sizeof(buf) / sizeof(buf[0]))) {
-      set_mark_mode_title(cm, buf);
-      return;
-    }
+  if(hyperlink_system_get_hover_title(cm->pos, cm->anchor, buf, sizeof(buf) / sizeof(buf[0]))) {
+    set_mark_mode_title(cm, buf);
+    return;
   }
   
   set_mark_mode_title(cm, cm->oritinal_title);
@@ -239,16 +237,22 @@ static void move_selection_down(struct console_mark_t *cm, BOOL fix_anchor) {
 
 static void goto_next_link(struct console_mark_t *cm, BOOL forward) {
   COORD pos;
+  COORD endpos;
   
   assert(cm != NULL);
   
-  pos = hyperlink_system_find_next_link(cm->pos, forward);
+  pos = cm->pos;
+  if(!hyperlink_system_find_next_link(&pos, &endpos, forward)) {
+    console_alert(cm->output_handle);
+    return;
+  }
+  
   if(pos.X == cm->pos.X && pos.Y == cm->pos.Y) {
     console_alert(cm->output_handle);
     return;
   }
   
-  reselect_output(cm, pos, pos);
+  reselect_output(cm, pos, endpos);
 }
 
 static wchar_t *cat_console_line(

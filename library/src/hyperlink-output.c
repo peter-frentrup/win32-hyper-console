@@ -86,8 +86,8 @@ static void activate_all_links(struct hyperlink_collection_t *hc);
 static void deactivate_all_links(struct hyperlink_collection_t *hc);
 
 static BOOL hs_click(struct hyperlink_collection_t *hc, COORD local);
-static BOOL hs_get_hover_title(struct hyperlink_collection_t *hc, COORD local, wchar_t *buf, size_t buf_len);
-static COORD hs_find_next_link(struct hyperlink_collection_t *hc, COORD pos, BOOL forward);
+static BOOL hs_get_hover_title(struct hyperlink_collection_t *hc, COORD local, COORD local_end, wchar_t *buf, size_t buf_len);
+static BOOL hs_find_next_link(struct hyperlink_collection_t *hc, COORD *pos, COORD *endpos, BOOL forward);
 
 static void on_mouse_enter_link(struct hyperlink_collection_t *hc);
 static void on_mouse_leave_link(struct hyperlink_collection_t *hc);
@@ -730,12 +730,31 @@ static BOOL hs_click(struct hyperlink_collection_t *hc, COORD local) {
   return stop_current_input(FALSE, link->input_text);
 }
 
-static BOOL hs_get_hover_title(struct hyperlink_collection_t *hc, COORD local, wchar_t *buf, size_t buf_len) {
+static BOOL hs_get_hover_title(struct hyperlink_collection_t *hc, COORD local, COORD local_end, wchar_t *buf, size_t buf_len) {
   struct hyperlink_t *link = find_link(hc, local);
   
   if(!link)
     return FALSE;
     
+  if(local.X != local_end.X || local.Y != local_end.Y) {
+    int end_line;
+    int end_column;
+    
+    BOOL start_ok;
+    BOOL end_ok;
+    
+    if(!console_scollback_local_to_global(hc->scrollback, local_end, &end_line, &end_column))
+      return FALSE;
+    
+    start_ok = is_global_position_before(link->start_global_line, link->start_column, end_line, end_column);
+    if(!start_ok)
+      return FALSE;
+    
+    end_ok = is_global_position_before(end_line, end_column, link->end_global_line, link->end_column);
+    if(!end_ok)
+      return FALSE;
+  }
+  
   if(!buf || buf_len == 0)
     return TRUE;
     
@@ -749,7 +768,7 @@ static BOOL hs_get_hover_title(struct hyperlink_collection_t *hc, COORD local, w
   return TRUE;
 }
 
-static COORD hs_find_next_link(struct hyperlink_collection_t *hc, COORD pos, BOOL forward) {
+static BOOL hs_find_next_link(struct hyperlink_collection_t *hc, COORD *pos, COORD *endpos, BOOL forward) {
   struct hyperlink_t *link;
   struct hyperlink_t *best_below = NULL;
   struct hyperlink_t *best_above = NULL;
@@ -759,8 +778,9 @@ static COORD hs_find_next_link(struct hyperlink_collection_t *hc, COORD pos, BOO
   
   assert(hc != NULL);
   
-  if(!console_scollback_local_to_global(hc->scrollback, pos, &line, &column))
-    return pos;
+  *endpos = *pos;
+  if(!console_scollback_local_to_global(hc->scrollback, *pos, &line, &column))
+    return FALSE;
     
   for(link = hc->last_link; link != NULL; link = link->prev_link) {
     if(link->start_global_line == line && link->start_column == column)
@@ -786,10 +806,13 @@ static COORD hs_find_next_link(struct hyperlink_collection_t *hc, COORD pos, BOO
   else
     link = best_above ? best_above : bottomost;
     
-  if(link)
-    console_scollback_global_to_local(hc->scrollback, link->start_global_line, link->start_column, &pos);
+  if(link) {
+    console_scollback_global_to_local(hc->scrollback, link->start_global_line, link->start_column, pos);
+    console_scollback_global_to_local(hc->scrollback, link->end_global_line, link->end_column, endpos);
+    return TRUE;
+  }
     
-  return pos;
+  return FALSE;
 }
 
 static void on_mouse_enter_link(struct hyperlink_collection_t *hc) {
@@ -1202,7 +1225,7 @@ BOOL hyperlink_system_click(COORD local) {
   return handled;
 }
 
-BOOL hyperlink_system_get_hover_title(COORD local, wchar_t *buf, size_t buf_len) {
+BOOL hyperlink_system_get_hover_title(COORD local, COORD local_end, wchar_t *buf, size_t buf_len) {
   BOOL result;
   
   assert(buf != NULL || buf_len == 0);
@@ -1214,24 +1237,30 @@ BOOL hyperlink_system_get_hover_title(COORD local, wchar_t *buf, size_t buf_len)
     
   EnterCriticalSection(_cs_global_links);
   
-  result = hs_get_hover_title(_global_links, local, buf, buf_len);
+  result = hs_get_hover_title(_global_links, local, local_end, buf, buf_len);
   
   LeaveCriticalSection(_cs_global_links);
   
   return result;
 }
 
-COORD hyperlink_system_find_next_link(COORD pos, BOOL forward) {
-  if(!_have_hyperlink_system)
-    return pos;
+BOOL hyperlink_system_find_next_link(COORD *pos, COORD *endpos, BOOL forward) {
+  BOOL success = FALSE;
+  
+  assert(pos != NULL);
+  assert(endpos != NULL);
+  
+  *endpos = *pos;
+  if(!_have_hyperlink_system) 
+    return FALSE;
     
   EnterCriticalSection(_cs_global_links);
   
-  pos = hs_find_next_link(_global_links, pos, forward);
+  success = hs_find_next_link(_global_links, pos, endpos, forward);
   
   LeaveCriticalSection(_cs_global_links);
   
-  return pos;
+  return success;
 }
 
 BOOL hyperlink_system_handle_events(INPUT_RECORD *event) {
