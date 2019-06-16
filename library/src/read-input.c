@@ -104,6 +104,7 @@ struct console_input_t {
   unsigned continue_with_search: 1;
   unsigned retain_completions: 1;
   unsigned navigating_history: 1;
+  unsigned no_echo: 1;
 };
 
 static BOOL is_console(HANDLE handle);
@@ -950,6 +951,9 @@ static BOOL set_output_cursor_position(struct console_input_t *con) {
 }
 
 static BOOL update_output(struct console_input_t *con) {
+  if(con->no_echo)
+    return !(con->error);
+  
   fill_output_buffer(con);
   colorize_matching_fences(con);
   highlight_completion(con);
@@ -2394,6 +2398,10 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
     if((settings->flags & HYPER_CONSOLE_FLAGS_MULTILINE) != 0) {
       con->multiline_mode = TRUE;
       con->need_more_input_predicate = default_multiline_need_more_input_predicate;
+    }
+    
+    if((settings->flags & HYPER_CONSOLE_NO_ECHO) != 0) {
+      con->no_echo = TRUE;
     }
   }
   

@@ -30,7 +30,13 @@ enum {
       But that can be changed by providing a `hyper_console_settings_t::need_more_input_predicate`
       callback.
    */
-  HYPER_CONSOLE_FLAGS_MULTILINE = 1
+  HYPER_CONSOLE_FLAGS_MULTILINE = 1,
+  
+  /** Do not echo the input text.
+      
+      This may be used for password input.
+   */
+  HYPER_CONSOLE_NO_ECHO = 2
 };
 
 

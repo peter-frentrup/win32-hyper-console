@@ -1003,6 +1003,47 @@ static void goto_bottom(void) {
   }
 }
 
+static void show_secret_help_callback(void *dummy) {
+  //show_help();
+  printf("Type something and finish with <ENTER> or <ESCAPE>.\n");
+}
+
+static BOOL secret_key_event_filter(void *context, const KEY_EVENT_RECORD *er) {
+  if(er->bKeyDown) {
+    if(er->wVirtualKeyCode == VK_F1) {
+      hyper_console_interrupt(show_secret_help_callback, NULL);
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+static void ask_secret(void) {
+  struct hyper_console_settings_t settings;
+  wchar_t *str;
+  
+  memset(&settings, 0, sizeof(settings));
+  settings.size = sizeof(settings);
+  //settings.need_more_input_predicate = need_more_input_predicate;
+  //settings.auto_completion = auto_completion;
+  //settings.line_continuation_prompt = L"...>";
+  settings.key_event_filter = secret_key_event_filter;
+  //settings.first_tab_column = 4;
+  settings.flags = HYPER_CONSOLE_NO_ECHO;
+  
+  printf("Hidden input:");
+  str = hyper_console_readline(&settings);
+  if(str) {
+    write_unicode(L"you typed '");
+    write_unicode(str);
+    write_unicode(L"'\n");
+  }
+}
+
+static void ask_secret_callback(void *dummy) {
+  ask_secret();
+}
+
 static void show_help(void) {
 
   printf("Available commands\n");
@@ -1032,7 +1073,9 @@ static void show_help(void) {
   printf("\t List all available drives.\n");
   
   write_simple_link(L"command help", L"help", L"help");
-  printf("\t Display this help.\n");
+  printf("\t Display this help ");
+  write_simple_link(L"Keyboard shortcut for 'help'", L"help", L"[F1]");
+  printf(".\n");
   
   write_simple_link(L"Lorem ipsum dolor sit...", L"lorem", L"lorem");
   printf("\t Print some text full of dummy links (for testing purposes).\n");
@@ -1048,6 +1091,11 @@ static void show_help(void) {
   
   write_simple_link(L"run pause", L"run pause", L"run");
   printf("\t Execute an arbitrary command.\n");
+  
+  write_simple_link(L"Echo a secret", L"secret", L"secret");
+  printf("\t Input a secret (hidden input) ");
+  write_simple_link(L"Keyboard shortcut for 'secret'", L"secret", L"[F2]");
+  printf(".\n");
   
   write_simple_link(L"single-line input", L"single", L"single");
   printf("\t Switch to single-line input mode (default).\n");
@@ -1099,6 +1147,7 @@ static wchar_t **auto_completion(void *context, const wchar_t *buffer, int len, 
     L"open",
     L"quit",
     L"run",
+    L"secret",
     L"single",
     L"tree"
   };
@@ -1144,9 +1193,14 @@ static wchar_t **auto_completion(void *context, const wchar_t *buffer, int len, 
 
 static BOOL key_event_filter(void *context, const KEY_EVENT_RECORD *er) {
   if(er->bKeyDown) {
-    if(er->wVirtualKeyCode == VK_F1) {
-      hyper_console_interrupt(show_help_callback, NULL);
-      return TRUE;
+    switch(er->wVirtualKeyCode) {
+      case VK_F1:
+        hyper_console_interrupt(show_help_callback, NULL);
+        return TRUE;
+      
+      case VK_F2:
+        hyper_console_interrupt(ask_secret_callback, NULL);
+        return TRUE;
     }
   }
   return FALSE;
@@ -1199,7 +1253,7 @@ int main() {
       continue;
       
     if(wcscmp(str, L"multi") == 0) {
-      printf("Switching to multi-line mode.\n");
+      printf("Switching to multi-line mode. Try entering 'f( <ENTER> ) <ENTER>'\n");
       settings.flags |= HYPER_CONSOLE_FLAGS_MULTILINE;
       continue;
     }
@@ -1263,6 +1317,11 @@ int main() {
     
     if(first_word_equals(str, L"run")) {
       _wsystem(str + 3);
+      continue;
+    }
+    
+    if(first_word_equals(str, L"secret")) {
+      ask_secret();
       continue;
     }
     
