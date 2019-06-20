@@ -413,7 +413,7 @@ void console_scrollback_free(struct console_scrollback_t *cs) {
 
 void console_scrollback_update(struct console_scrollback_t *cs, int known_visible_lines) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
-  wchar_t *visible_lines;
+  CHAR_INFO *visible_cells;
   COORD visible_size;
   
   if(cs == NULL)
@@ -437,31 +437,36 @@ void console_scrollback_update(struct console_scrollback_t *cs, int known_visibl
     return;
   }
   
-  
-  visible_lines = hyper_console_allocate_memory(visible_size.X * visible_size.Y * sizeof(wchar_t));
-  if(visible_lines != NULL) {
-    DWORD num_read;
-    COORD pos;
-    
-    pos.X = 0;
-    pos.Y = 0;
-    num_read = 0;
-    if( console_read_output_character(
+  visible_cells = hyper_console_allocate_memory(visible_size.X * visible_size.Y * sizeof(CHAR_INFO));
+  if(visible_cells != NULL) {
+    SMALL_RECT read_region;
+    read_region.Left = 0;
+    read_region.Top = 0;
+    read_region.Right = read_region.Left + visible_size.X - 1;
+    read_region.Bottom = read_region.Top + visible_size.Y - 1;
+    COORD write_pos;
+    write_pos.X = 0;
+    write_pos.Y = 0;
+    if( console_read_output(
           cs->output_handle,
-          visible_lines,
-          visible_size.X * visible_size.Y,
-          pos,
-          &num_read) &&
-        num_read == visible_size.X * visible_size.Y)
+          visible_cells,
+          visible_size,
+          write_pos,
+          &read_region) &&
+       read_region.Right + 1 - read_region.Left == visible_size.X &&
+       read_region.Bottom + 1 - read_region.Top == visible_size.Y) 
     {
+      wchar_t *visible_lines = (wchar_t*)visible_cells;
+      for(int i = 0;i < visible_size.X * visible_size.Y;++i)
+        visible_lines[i] = visible_cells[i].Char.UnicodeChar;
+      
       match_lines(cs, visible_lines, visible_size);
       clean_old_lines(cs);
       append_new_known_lines(cs, visible_lines, visible_size);
     }
     
-    hyper_console_free_memory(visible_lines);
+    hyper_console_free_memory(visible_cells);
   }
-  
 }
 
 BOOL console_scollback_local_to_global(struct console_scrollback_t *cs, COORD local, int *line, int *column) {
