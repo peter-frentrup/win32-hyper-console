@@ -5,6 +5,13 @@
 
 #define LITERAL_KEY_STATE  0x10000
 
+BOOL console_read_output(
+  HANDLE      hConsoleOutput,
+  PCHAR_INFO  lpBuffer,
+  COORD       dwBufferSize,
+  COORD       dwBufferCoord,
+  PSMALL_RECT lpReadRegion);
+
 /** Read characters from the console buffer.
     Fullwidth CJK characters that take two cells are compressed, so the number of chars read 
     may be smaller than the number of cells specified by dwReadCoord.

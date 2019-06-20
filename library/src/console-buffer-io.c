@@ -27,6 +27,20 @@ struct send_input_t {
 static BOOL flush_input(struct send_input_t *context);
 static BOOL send_input(struct send_input_t *context, wchar_t ch, DWORD control_key_state);
 
+BOOL console_read_output(
+  HANDLE      hConsoleOutput,
+  PCHAR_INFO  lpBuffer,
+  COORD       dwBufferSize,
+  COORD       dwBufferCoord,
+  PSMALL_RECT lpReadRegion
+) {
+  // TODO: issue multiple calls to ensure that at most MAX_BUFFER cells are transmitted
+  if(!ReadConsoleOutputW(hConsoleOutput, lpBuffer, dwBufferSize, dwBufferCoord, lpReadRegion)) {
+    debug_printf(L"console_read_output: ReadConsoleOutputW");
+    return FALSE;
+  }
+  return TRUE;
+}
 
 BOOL console_read_output_character(
     HANDLE hConsoleOutput,
