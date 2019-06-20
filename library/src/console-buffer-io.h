@@ -5,26 +5,34 @@
 
 #define LITERAL_KEY_STATE  0x10000
 
+/** Read characters from the console buffer.
+    Fullwidth CJK characters that take two cells are compressed, so the number of chars read 
+    may be smaller than the number of cells specified by dwReadCoord.
+ */
 BOOL console_read_output_character(
-    HANDLE hConsoleOutput,
-    LPWSTR lpCharacter,
-    DWORD nLength,
-    COORD dwReadCoord,
-    LPDWORD lpNumberOfCharsRead);
+  HANDLE hConsoleOutput,
+  LPWSTR lpCharacter,
+  DWORD nLength,
+  COORD dwReadCoord,
+  LPDWORD lpNumberOfCharsRead);
 
+/** Read attributes from the console buffer.
+    Fullwidth CJK characters that take two cells are compressed, so the number of chars read 
+    may be smaller than the number of cells specified by dwReadCoord.
+ */
 BOOL console_read_output_attribute(
-    HANDLE hConsoleOutput,
-    LPWORD lpAttribute,
-    DWORD nLength,
-    COORD dwReadCoord,
-    LPDWORD lpNumberOfAttrsRead);
+  HANDLE hConsoleOutput,
+  LPWORD lpAttribute,
+  DWORD nLength,
+  COORD dwReadCoord,
+  LPDWORD lpNumberOfAttrsRead);
 
 BOOL console_write_output_attribute(
-    HANDLE hConsoleOutput,
-    const LPWORD lpAttribute,
-    DWORD nLength,
-    COORD dwWriteCoord,
-    LPDWORD lpNumberOfAttrsWritten);
+  HANDLE hConsoleOutput,
+  const LPWORD lpAttribute,
+  DWORD nLength,
+  COORD dwWriteCoord,
+  LPDWORD lpNumberOfAttrsWritten);
 
 void console_reinvert_colors(
   HANDLE hConsoleOutput,

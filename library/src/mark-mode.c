@@ -262,7 +262,7 @@ static wchar_t *cat_console_line(
   COORD start,
   int length
 ) {
-  DWORD dummy_read_count;
+  DWORD read_count;
   wchar_t *s;
   
   assert(cm != NULL);
@@ -283,9 +283,9 @@ static wchar_t *cat_console_line(
     buffer,
     length,
     start,
-    &dummy_read_count);
+    &read_count);
     
-  s = buffer + length;
+  s = buffer + read_count;
   if(s[-1] == L' ') {
     while(s > buffer && s[-1] == L' ')
       --s;
@@ -395,7 +395,7 @@ static wchar_t *get_selection_block_lines(struct console_mark_t *cm, int *total_
   s = str;
   pos.X = start.X;
   for(pos.Y = start.Y; pos.Y <= end.Y; pos.Y++) {
-    DWORD dummy_read_count;
+    DWORD read_count;
     wchar_t *next;
     
     console_read_output_character(
@@ -403,9 +403,9 @@ static wchar_t *get_selection_block_lines(struct console_mark_t *cm, int *total_
       s,
       line_length,
       pos,
-      &dummy_read_count);
+      &read_count);
       
-    next = s + line_length;
+    next = s + read_count;
     if(pos.Y < end.Y) {
       while(next != s && next[-1] == L' ')
         --next;
