@@ -160,6 +160,7 @@
 		</Compiler>
 		<Linker>
 			<Add library="user32" />
+			<Add library="gdi32" />
 		</Linker>
 		<ExtraCommands>
 			<Add after="cmd /C if not exist ..\app\$(TARGET_OUTPUT_DIR) ( mkdir ..\app\$(TARGET_OUTPUT_DIR) )" />
