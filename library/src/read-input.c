@@ -661,6 +661,22 @@ static BOOL expand_glyphs(struct console_input_t *con) {
       bufpos += tabstop - column - 1;
       continue;
     }
+    
+    if(con->output_buffer[bufpos].Attributes & (COMMON_LVB_LEADING_BYTE |  COMMON_LVB_TRAILING_BYTE)) 
+      continue;
+    
+    if(2 == console_get_cell_count_for_character(con->output_buffer[bufpos].Char.UnicodeChar)) {
+      CHAR_INFO cell;
+      cell.Char.UnicodeChar = con->output_buffer[bufpos].Char.UnicodeChar;
+      cell.Attributes = con->output_buffer[bufpos].Attributes | COMMON_LVB_TRAILING_BYTE;
+      
+      if(!insert_glyphs(con, bufpos + 1, &cell, 1, 1))
+        return FALSE;
+        
+      con->output_buffer[bufpos].Attributes |= COMMON_LVB_LEADING_BYTE;
+      ++bufpos;
+      continue;
+    }
   }
   
   return 1;

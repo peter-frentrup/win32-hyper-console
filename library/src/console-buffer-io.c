@@ -761,3 +761,142 @@ void console_alert(HANDLE hConsoleOutput) {
     hyper_console_free_memory(attr);
   }
 }
+
+static int simple_cell_count_for_character(wchar_t ch) {
+  // see LengthInBufferCells() in https://github.com/PowerShell/PowerShell/blob/master/src/Microsoft.PowerShell.ConsoleHost/host/msh/ConsoleControl.cs
+  // or http://www.cl.cam.ac.uk/~mgk25/c/wcwidth.c
+  
+  if(ch < 0x1100) // before first CJK character (Hangul)
+    return 1;
+  
+  if(ch <= 0x115f) // Hangul Jamo init. consonants
+    return 2; 
+  
+  //if(ch == 0x2329 || ch == 0x232a) // left and right pointing angle brackets
+  //  return 2; 
+  
+  if(ch >= 0x2e80 && ch <= 0xa4cf) { // CJK ... Yi
+    if(ch == 0x303f) // Ideographic Half Fill Space
+      return 1;
+    return 2;
+  }
+  
+  if(ch >= 0xac00 && ch <= 0xd7a3) // Hangul Syllables
+    return 2;
+  
+  if(ch >= 0xf900 && ch <= 0xfaff) // CJK Compatibility Ideographs
+    return 2;
+  
+  if(ch >= 0xfe10 && ch <= 0xfe19) // Vertical forms
+    return 2;
+  
+  if(ch >= 0xfe30 && ch <= 0xfe6f) // CJK Compatibility Forms
+    return 2;
+  
+  if(ch >= 0xff00 && ch <= 0xff60) // Fullwidth Forms
+    return 2;
+  
+  if(ch >= 0xffe0 && ch <= 0xffe6) // Fullwidth Forms
+    return 2;
+  
+  return 1;
+  
+//  // see LengthInBufferCells() in https://github.com/microsoft/DbgShell/blob/master/DbgShell/ConsoleControl.cs
+//  
+//  if(0x20 <= ch && ch <= 0x7e)
+//    return 1; // ASCII
+//  
+//  if(0x3041 <= ch && ch <= 0x3094)
+//    return 2; // Hiragana
+//  
+//  if(0x30a1 <= ch && ch <= 0x30f6)
+//    return 2; // Katakana
+//  
+//  if(0x3105 <= ch && ch <= 0x312c)
+//    return 2; // Bopomofo
+//    
+//  if(0x3131 <= ch && ch <= 0x318e)
+//    return 2; // Hangul elements
+//    
+//  if(0xac00 <= ch && ch <= 0xd7a3)
+//    return 2; // Korean Hangul syllables
+//    
+//  if(0xff01 <= ch && ch <= 0xff5e)
+//    return 2; // Fullwidth ASCII variants
+//    
+//  if(0xff61 <= ch && ch <= 0xff9f)
+//    return 1; // Halfwidth Katakana variants
+//    
+//  if((0xffa0 <= ch && ch <= 0xffbe) ||
+//      (0xffc2 <= ch && ch <= 0xffc7) ||
+//      (0xffca <= ch && ch <= 0xffcf) ||
+//      (0xffd2 <= ch && ch <= 0xffd7) ||
+//      (0xffda <= ch && ch <= 0xffdc))
+//  {
+//    return 1; // Halfwidth Hangul variants
+//  }
+//  
+//  if (0xffe0 <= ch && ch <= 0xffe6)
+//    return 2; // Fullwidth symbol variants
+//    
+//  if (0x4e00 <= ch && ch <= 0x9fa5)
+//    return 2; // Han ideographic
+//  
+//  if (0xf900 <= ch && ch <= 0xfa2d)
+//    return 2; // Han compatibility ideographs
+//    
+//  return 0;
+}
+
+int console_get_cell_count_for_character(wchar_t ch) {
+  return simple_cell_count_for_character(ch);
+//  // see LengthInBufferCells() in https://github.com/microsoft/DbgShell/blob/master/DbgShell/ConsoleControl.cs
+//  HWND hwnd;
+//  HDC hdc;
+//  TEXTMETRICW tm;
+//  int pixel_width;
+//  ABC abc;
+//  
+//  int count = simple_cell_count_for_character(ch);
+//  if(count)
+//    return count;
+//  
+//  count = 1;
+//  
+//  hwnd = GetConsoleWindow();
+//  if(!hwnd) {
+//    debug_printf(L"console_get_cell_count_for_character: GetConsoleWindow");
+//    goto FAIL_HWND;
+//  }
+//  
+//  hdc = GetDC(hwnd);
+//  if(!hdc) {
+//    debug_printf(L"console_get_cell_count_for_character: GetDC");
+//    goto FAIL_DC;
+//  }
+//  
+//  if(!GetTextMetricsW(hdc, &tm)) {
+//    debug_printf(L"console_get_cell_count_for_character: GetTextMetricsW");
+//    goto FAIL_TM;
+//  }
+//  
+//  // TODO: GetCharWidth32 cannot be used to TrueType fonts, use GetCharABCWidthsW instead
+//  if(!GetCharWidth32W(hdc, ch, ch, &pixel_width)) {
+//    debug_printf(L"console_get_cell_count_for_character: GetCharWidth32W");
+//    goto FAIL_WIDTH;
+//  }
+//  
+//  if(!GetCharABCWidthsW(hdc, ch, ch, &abc)) {
+//    debug_printf(L"console_get_cell_count_for_character: GetCharABCWidthsW");
+//    goto FAIL_WIDTH;
+//  }
+//  
+//  count = (pixel_width >= tm.tmMaxCharWidth) ? 2 : 1;
+//  
+//FAIL_WIDTH:
+//FAIL_TM:
+//  ReleaseDC(hwnd, hdc);
+//FAIL_DC:
+//FAIL_HWND:
+//  return count;
+}

@@ -77,4 +77,9 @@ BOOL console_get_screen_word_start_end(HANDLE hConsoleOutput, COORD pos, COORD *
 
 void console_alert(HANDLE hConsoleOutput);
 
+/* Get the number of output cells for this character. Will generally return 2 for fullwidth CJK 
+   characters and 1 for halfwidth characters. This property is font-dependent.
+ */
+int console_get_cell_count_for_character(wchar_t ch);
+
 #endif // __CONSOLE_BUFFER_IO_H__
