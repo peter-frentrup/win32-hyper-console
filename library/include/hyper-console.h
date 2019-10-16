@@ -5,6 +5,8 @@
 #include <hyper-console-config.h>
 
 
+/** An opaque structure that holds the current command history.
+ */
 struct hyper_console_history_t;
 
 /** Create a new console history buffer.
@@ -96,8 +98,8 @@ struct hyper_console_settings_t {
   
   /** Optional prompt for second/third/... line in multiline mode.
    */
-  const wchar_t *line_continuation_prompt;
   
+  const wchar_t *line_continuation_prompt;
   /** Optional pre-processor for any key events.
       \param context  The value provided in \c callback_context.
       \param er       The key event record.
@@ -187,16 +189,44 @@ void hyper_console_free_memory(void *data);
 
 
 
+/** Initialize the hyperlink system.
+  
+  This must be called before any other hyperling related functions.
+  To clean-up, call hyper_console_done_hyperlink_system().
+  
+  Note that calls to hyper_console_init_hyperlink_system() ... hyper_console_done_hyperlink_system()
+  may not be nested.
+ */
 HYPER_CONSOLE_API
 void hyper_console_init_hyperlink_system(void);
 
+/** Clean-up the hyperlink system.
+ */
 HYPER_CONSOLE_API
 void hyper_console_done_hyperlink_system(void);
 
 
+/** Start writing a hyperlink.
+
+  \a title An optional title to show (in the console's title bar) when hovering the link.
+           If set to NULL, the links' destination defined by hyper_console_set_link_input_text() 
+           will be used.
+  
+  Any text written to the console until the call to hyper_console_end_link() will be part 
+  of the hyperlink. Nested links are technically possible but not useful. 
+  
+  In HTML parlance, this function corresponds to an opting `<a title="...">` anchor.
+  
+  In DML (Debugger Markup Language) this corresponds to an opening `<link >` anchor.
+ */
 HYPER_CONSOLE_API
 void hyper_console_start_link(const wchar_t *title);
 
+/** Set the command/destination of the currently opened link.
+  
+  \a text An optional text that will be returned by hyper_console_readline() when the 
+          link is clicked.
+ */
 HYPER_CONSOLE_API
 void hyper_console_set_link_input_text(const wchar_t *text);
 
@@ -205,6 +235,10 @@ void hyper_console_set_link_input_text(const wchar_t *text);
 HYPER_CONSOLE_API
 WORD hyper_console_set_link_color(WORD attribute);
 
+/** Close the currently opened link.
+  
+  In HTML (resp. DML) parlance, this puts the closing `</a>` (resp. `</link>`) tag.
+ */
 HYPER_CONSOLE_API
 void hyper_console_end_link(void);
 
