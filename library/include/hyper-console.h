@@ -36,7 +36,7 @@ enum {
       
       This may be used for password input.
    */
-  HYPER_CONSOLE_NO_ECHO = 2
+  HYPER_CONSOLE_FLAGS_NO_ECHO = 2
 };
 
 
@@ -94,7 +94,7 @@ struct hyper_console_settings_t {
    */
   wchar_t **(*auto_completion)(void *context, const wchar_t *buffer, int len, int cursor_pos, int *completion_start, int *completion_end);
   
-  /** Optional promt for second/third/... line in multiline mode.
+  /** Optional prompt for second/third/... line in multiline mode.
    */
   const wchar_t *line_continuation_prompt;
   
@@ -159,7 +159,7 @@ const wchar_t *hyper_console_get_current_input(int *length);
   \param position Pointer to an integer receiving the cursor position. Must not be NULL.
   \param anchor   Pointer to an integer receiving the selection anchor. Must not be NULL.
   
-  The selected text is betwwen \a position and \a anchor.
+  The selected text is between \a position and \a anchor.
  */
 HYPER_CONSOLE_API
 void hyper_console_get_current_selection(int *position, int *anchor);

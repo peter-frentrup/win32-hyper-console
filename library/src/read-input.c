@@ -2416,7 +2416,7 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
       con->need_more_input_predicate = default_multiline_need_more_input_predicate;
     }
     
-    if((settings->flags & HYPER_CONSOLE_NO_ECHO) != 0) {
+    if((settings->flags & HYPER_CONSOLE_FLAGS_NO_ECHO) != 0) {
       con->no_echo = TRUE;
     }
   }

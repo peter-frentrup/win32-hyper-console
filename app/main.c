@@ -1029,7 +1029,7 @@ static void ask_secret(void) {
   //settings.line_continuation_prompt = L"...>";
   settings.key_event_filter = secret_key_event_filter;
   //settings.first_tab_column = 4;
-  settings.flags = HYPER_CONSOLE_NO_ECHO;
+  settings.flags = HYPER_CONSOLE_FLAGS_NO_ECHO;
   
   printf("Hidden input:");
   str = hyper_console_readline(&settings);
