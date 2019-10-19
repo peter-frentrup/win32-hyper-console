@@ -1,11 +1,13 @@
 # README #
 
-This library implements advanced Win32 console input with mouse and clipboard support. 
+This library implements advanced Win32 console input with hyperlinks, mouse and clipboard support. 
+
+This software is available under the *GNU Library General Public License (LGPL 2.0)*, see [LICENSE.md](LICENSE.md).
 
 ### Features ###
 
 * Unicode-only
-* Single-line and multi-line mode
+* Single-line and multi-line input
 * Mouse and keyboard selection
 * Clipboard support via Ctrl+C, Ctrl+X, Ctrl+V
 * Search console output with Ctrl+F
@@ -14,10 +16,10 @@ This library implements advanced Win32 console input with mouse and clipboard su
   - Rectangle selection with pressed Alt key, otherwise line selection. 
   - during mark mode: Tab to select next/previous link. Space to click current link.
 * Highlight matching bracket
-* surround selection with (...), [...], "..." when one of the delimiters is entered.
+* surround selection with (...), [...], "..." when one of these delimiters is entered.
 * Input history
-* customizable auto-completion with Tab/Shift+Tab/Esc
-* customizable keyboard shortcuts
+* Customizable auto-completion with Tab/Shift+Tab/Esc
+* Customizable keyboard shortcuts
 
 ### Goals/TODO ###
 
