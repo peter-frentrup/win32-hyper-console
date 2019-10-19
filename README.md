@@ -1,6 +1,7 @@
 # README #
 
 This library implements advanced Win32 console input with hyperlinks, mouse and clipboard support. 
+For examples and screenshots, see the [Wiki](https://bitbucket.org/pfrentrup/hyper-console/wiki/Home).
 
 This software is available under the *GNU Library General Public License (LGPL 2.0)*, see [LICENSE.md](LICENSE.md).
 
