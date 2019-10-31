@@ -1,6 +1,7 @@
 # README #
 
 This library implements advanced Win32 console input with hyperlinks, mouse and clipboard support. 
+Development takes place on [BitBucket](https://bitbucket.org/pfrentrup/hyper-console).
 
 ![Clickable links](docs/navigation.gif)
 
