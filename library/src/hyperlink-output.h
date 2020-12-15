@@ -18,6 +18,7 @@ BOOL hyperlink_system_find_next_link(COORD *pos, COORD *endpos, BOOL forward);
 
 BOOL hyperlink_system_handle_events(INPUT_RECORD *event);
 
+void hyperlink_system_update_scollback(int pre_input_lines);
 void hyperlink_system_start_input(int console_width, int pre_input_lines);
 void hyperlink_system_end_input(void);
 

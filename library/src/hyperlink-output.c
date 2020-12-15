@@ -103,7 +103,8 @@ static BOOL hs_handle_focus_event(struct hyperlink_collection_t *hc, const FOCUS
 
 static BOOL hs_handle_events(struct hyperlink_collection_t *hc, INPUT_RECORD *event);
 
-static void hs_start_input(struct hyperlink_collection_t *hc, int console_width, int pre_input_lines);
+static void hs_update_scollback(struct hyperlink_collection_t *hc, int pre_input_lines);
+static void hs_start_input(struct hyperlink_collection_t *hc, int console_width);
 static void hs_end_input(struct hyperlink_collection_t *hc);
 
 //static void hs_print_debug_info(struct hyperlink_collection_t *hc);
@@ -1011,13 +1012,12 @@ static BOOL hs_handle_events(struct hyperlink_collection_t *hc, INPUT_RECORD *ev
   };
 }
 
-static void hs_start_input(struct hyperlink_collection_t *hc, int console_width, int pre_input_lines) {
+static void hs_update_scollback(struct hyperlink_collection_t *hc, int pre_input_lines) {
   assert(hc != NULL);
-  assert(console_width > 0);
   
   if(pre_input_lines < 0)
     pre_input_lines = 0;
-    
+  
   /* TODO: read_input should be able to state that it knows, that the local line pre_input_lines
      is some particular global line, so we don't whipe out all links in case the old_lines are not
      fully visible any more.
@@ -1028,6 +1028,11 @@ static void hs_start_input(struct hyperlink_collection_t *hc, int console_width,
      For non-wrapping consoles, not calling console_scrollback_update() here would be best.
    */
   console_scrollback_update(hc->scrollback, pre_input_lines);
+}
+
+static void hs_start_input(struct hyperlink_collection_t *hc, int console_width) {
+  assert(hc != NULL);
+  assert(console_width > 0);
   
   hc->console_width = console_width;
   
@@ -1278,13 +1283,25 @@ BOOL hyperlink_system_handle_events(INPUT_RECORD *event) {
   return handled;
 }
 
+void hyperlink_system_update_scollback(int pre_input_lines) {
+  if(!_have_hyperlink_system)
+    return;
+  
+  EnterCriticalSection(_cs_global_links);
+  
+  hs_update_scollback(_global_links, pre_input_lines);
+  
+  LeaveCriticalSection(_cs_global_links);
+}
+
 void hyperlink_system_start_input(int console_width, int pre_input_lines) {
   if(!_have_hyperlink_system)
     return;
     
   EnterCriticalSection(_cs_global_links);
   
-  hs_start_input(_global_links, console_width, pre_input_lines);
+  hs_update_scollback(_global_links, pre_input_lines);
+  hs_start_input(_global_links, console_width);
   
   LeaveCriticalSection(_cs_global_links);
 }

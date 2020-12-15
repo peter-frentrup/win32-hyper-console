@@ -210,7 +210,7 @@ static int is_match(const struct text_line_t *original, const wchar_t *visible, 
   orig_rest_length = original->length;
   
   matched_lines = 0;
-  while(visible_size.X < orig_rest_length && visible_size.Y > 0) {
+  while(visible_size.X <= orig_rest_length && visible_size.Y > 0) {
     if(0 != memcmp(orig_rest, visible, visible_size.X * sizeof(wchar_t)))
       return matched_lines;
       

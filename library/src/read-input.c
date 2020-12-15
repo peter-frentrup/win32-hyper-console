@@ -92,6 +92,8 @@ struct console_input_t {
   DWORD old_input_mode;
   DWORD old_output_mode;
   
+  DWORD next_delayed_resize_time;
+  
   int tab_width;
   int first_tab_column;
   
@@ -168,6 +170,7 @@ static void handle_lbutton_move(struct console_input_t *con, const MOUSE_EVENT_R
 static void handle_lbutton_double_click(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
 static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RECORD *er);
 
+static void handle_delayed_window_buffer_size_event(struct console_input_t *con);
 static void handle_window_buffer_size_event(struct console_input_t *con, const WINDOW_BUFFER_SIZE_RECORD *er);
 static void handle_focus_event(struct console_input_t *con, const FOCUS_EVENT_RECORD *er);
 static void handle_menu_event(struct console_input_t *con, const MENU_EVENT_RECORD *er);
@@ -1988,11 +1991,10 @@ static void handle_mouse_event(struct console_input_t *con, const MOUSE_EVENT_RE
   }
 }
 
-static void handle_window_buffer_size_event(struct console_input_t *con, const WINDOW_BUFFER_SIZE_RECORD *er) {
-  CONSOLE_SCREEN_BUFFER_INFO csbi;
-  
+static void handle_delayed_window_buffer_size_event(struct console_input_t *con) {CONSOLE_SCREEN_BUFFER_INFO csbi;
   assert(con != NULL);
-  assert(er != NULL);
+  
+  con->next_delayed_resize_time = 0;
   
   if(!GetConsoleScreenBufferInfo(con->output_handle, &csbi)) {
     con->error = "GetConsoleScreenBufferInfo";
@@ -2048,9 +2050,17 @@ static void handle_window_buffer_size_event(struct console_input_t *con, const W
   
   console_clean_lines(con->output_handle, con->input_line_coord_y);
   
+  hyperlink_system_update_scollback(con->input_line_coord_y);
   hyperlink_system_end_input();
   update_output(con);
   hyperlink_system_start_input(con->console_size.X, con->input_line_coord_y);
+}
+
+static void handle_window_buffer_size_event(struct console_input_t *con, const WINDOW_BUFFER_SIZE_RECORD *er) {
+  assert(con != NULL);
+  assert(er != NULL);
+  
+  con->next_delayed_resize_time = GetTickCount() + 300;
 }
 
 static void handle_focus_event(struct console_input_t *con, const FOCUS_EVENT_RECORD *er) {
@@ -2152,7 +2162,32 @@ static BOOL input_loop(struct console_input_t *con) {
   while(!con->stop && !con->error) {
     INPUT_RECORD event;
     DWORD num_read;
+    DWORD timeout = INFINITE;
     
+    if(con->next_delayed_resize_time) {
+      timeout = con->next_delayed_resize_time - GetTickCount();
+    }
+    
+    num_read = WaitForSingleObject(con->input_handle, timeout);
+    if(con->next_delayed_resize_time) {
+      if(con->next_delayed_resize_time <= GetTickCount()) {
+        con->next_delayed_resize_time = 0;
+        handle_delayed_window_buffer_size_event(con);
+      }
+    }
+    
+    switch(num_read) {
+      case WAIT_TIMEOUT: continue;
+      case WAIT_OBJECT_0: break;
+      case WAIT_ABANDONED: 
+        debug_printf(L"WaitForSingleObject: abandoned\n");
+        break;
+      case WAIT_FAILED: 
+        debug_printf(L"WaitForSingleObject failed\n");
+        break;
+    }
+    
+    num_read = 0;
     if(!ReadConsoleInputW(con->input_handle, &event, 1, &num_read) || num_read < 1) {
       con->error = "ReadConsoleInputW";
       break;
