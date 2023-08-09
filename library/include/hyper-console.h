@@ -38,14 +38,14 @@ enum {
       
       This may be used for password input.
    */
-  HYPER_CONSOLE_FLAGS_NO_ECHO = 2
+  HYPER_CONSOLE_FLAGS_NO_ECHO = 2,
 };
 
 
 /** Options for read_input()
  */
 struct hyper_console_settings_t {
-  /** Size of the structure, i.e. sizeof(struct read_input_settings_t)
+  /** Size of the structure, i.e. sizeof(struct hyper_console_settings_t)
    */
   size_t size;
   
@@ -98,12 +98,14 @@ struct hyper_console_settings_t {
   
   /** Optional prompt for second/third/... line in multiline mode.
    */
-  
   const wchar_t *line_continuation_prompt;
+  
   /** Optional pre-processor for any key events.
       \param context  The value provided in \c callback_context.
       \param er       The key event record.
       \return Whether the event was handled and automatic handling should be suppressed.
+      
+      During mark mode, `mark_mode_key_event_filter` is used instead.
    */
   BOOL (*key_event_filter)(void *context, const KEY_EVENT_RECORD *er);
   
@@ -118,6 +120,13 @@ struct hyper_console_settings_t {
       Defaults to 0.
    */
   int first_tab_column;
+  
+  /** Optional pre-processor for any key events druing mark mode.
+      \param context  The value provided in \c callback_context.
+      \param er       The key event record.
+      \return Whether the event was handled and automatic handling should be suppressed.
+   */
+  BOOL (*mark_mode_key_event_filter)(void *context, const KEY_EVENT_RECORD *er);
 };
 
 /** Read a line of input

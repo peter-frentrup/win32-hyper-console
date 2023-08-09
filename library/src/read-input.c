@@ -78,7 +78,8 @@ struct console_input_t {
   void *callback_context;
   BOOL (*need_more_input_predicate)(void *context, const wchar_t *buffer, int len, int cursor_pos);
   wchar_t **(*auto_completion)(void *context, const wchar_t *buffer, int len, int cursor_pos, int *completion_start, int *completion_end);
-  BOOL (*key_event_filter)(void *context, const KEY_EVENT_RECORD *er);
+  BOOL (*key_event_filter)(          void *context, const KEY_EVENT_RECORD *er);
+  BOOL (*mark_mode_key_event_filter)(void *context, const KEY_EVENT_RECORD *er);
   
   int completion_pos;
   int completion_end;
@@ -249,9 +250,10 @@ static BOOL init_console(struct console_input_t *con) {
   
   con->preferred_column = -1;
   
-  con->need_more_input_predicate = default_need_more_input_predicate;
-  con->auto_completion = default_auto_completion;
-  con->key_event_filter = default_key_event_filter;
+  con->need_more_input_predicate  = default_need_more_input_predicate;
+  con->auto_completion            = default_auto_completion;
+  con->key_event_filter           = default_key_event_filter;
+  con->mark_mode_key_event_filter = default_key_event_filter;
   
   con->tab_width = 8;
   
@@ -2221,8 +2223,13 @@ static BOOL input_loop(struct console_input_t *con) {
         
 //      if(console_handle_search_mode(con->input_handle, con->output_handle, &event, NULL))
 //        continue;
-
-      if(console_handle_mark_mode(con->input_handle, con->output_handle, &event, FALSE))
+      
+      struct mark_mode_settings_t mm = { 
+        .input_handle     = con->input_handle, 
+        .output_handle    = con->output_handle,
+        .callback_context = con->callback_context,
+        .key_event_filter = con->mark_mode_key_event_filter };
+      if(console_handle_mark_mode(&mm, &event, FALSE))
         continue;
     }
     
@@ -2256,7 +2263,12 @@ static BOOL input_loop(struct console_input_t *con) {
       if(con->redo_in_mark_mode) {
         con->redo_in_mark_mode = FALSE;
         
-        if(console_handle_mark_mode(con->input_handle, con->output_handle, &event, TRUE))
+        struct mark_mode_settings_t mm = { 
+          .input_handle     = con->input_handle, 
+          .output_handle    = con->output_handle,
+          .callback_context = con->callback_context,
+          .key_event_filter = con->mark_mode_key_event_filter };
+        if(console_handle_mark_mode(&mm, &event, TRUE))
           break;
       }
       else
@@ -2485,6 +2497,10 @@ wchar_t *hyper_console_readline(struct hyper_console_settings_t *settings) {
   
   if(HAVE_SETTINGS(settings, key_event_filter) && settings->key_event_filter) {
     con->key_event_filter = settings->key_event_filter;
+  }
+  
+  if(HAVE_SETTINGS(settings, mark_mode_key_event_filter) && settings->mark_mode_key_event_filter) {
+    con->mark_mode_key_event_filter = settings->mark_mode_key_event_filter;
   }
   
   if(HAVE_SETTINGS(settings, tab_width) && settings->tab_width) {

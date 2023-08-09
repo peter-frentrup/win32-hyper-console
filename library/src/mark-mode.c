@@ -26,6 +26,9 @@ struct console_mark_t {
   HANDLE input_handle;
   HANDLE output_handle;
   
+  void  *callback_context;
+  BOOL (*key_event_filter)(void *context, const KEY_EVENT_RECORD *er);
+  
   COORD console_size;
   
   COORD anchor;
@@ -50,10 +53,10 @@ static void make_inclusive_rect(SMALL_RECT *rect, COORD p1, COORD p2);
 static void set_selection_link_title(struct console_mark_t *cm);
 static void reselect_output(struct console_mark_t *cm, COORD pos, COORD anchor);
 
-static void move_selection_left(struct console_mark_t *cm, BOOL fix_anchor, BOOL jump_word);
+static void move_selection_left( struct console_mark_t *cm, BOOL fix_anchor, BOOL jump_word);
 static void move_selection_right(struct console_mark_t *cm, BOOL fix_anchor, BOOL jump_word);
-static void move_selection_up(struct console_mark_t *cm, BOOL fix_anchor);
-static void move_selection_down(struct console_mark_t *cm, BOOL fix_anchor);
+static void move_selection_up(   struct console_mark_t *cm, BOOL fix_anchor);
+static void move_selection_down (struct console_mark_t *cm, BOOL fix_anchor);
 
 static void goto_next_link(struct console_mark_t *cm, BOOL forward);
 
@@ -520,6 +523,11 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
   assert(cm != NULL);
   assert(er != NULL);
   
+  if(cm->active) {    
+    if(cm->key_event_filter(cm->callback_context, er))
+      return;
+  }
+  
   if(!er->bKeyDown)
     return cm->active;
     
@@ -811,21 +819,25 @@ static void finish_mark_mode(struct console_mark_t *cm) {
   }
 }
 
-BOOL console_handle_mark_mode(HANDLE hConsoleInput, HANDLE hConsoleOutput, INPUT_RECORD *event, BOOL force_mark_mode) {
+BOOL console_handle_mark_mode(struct mark_mode_settings_t *settings, INPUT_RECORD *event, BOOL force_mark_mode) {
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   struct console_mark_t cm;
   BOOL result;
   
   assert(event != NULL);
+  assert(settings != NULL);
+  assert(settings->key_event_filter != NULL);
   
   memset(&cm, 0, sizeof(cm));
-  cm.input_handle = hConsoleInput;
-  cm.output_handle = hConsoleOutput;
+  cm.input_handle     = settings->input_handle;
+  cm.output_handle    = settings->output_handle;
+  cm.callback_context = settings->callback_context;
+  cm.key_event_filter = settings->key_event_filter;
   
-  if(!GetConsoleScreenBufferInfo(hConsoleOutput, &csbi))
+  if(!GetConsoleScreenBufferInfo(cm.output_handle, &csbi))
     return FALSE;
     
-  if(!GetConsoleCursorInfo(hConsoleOutput, &cm.original_cursor))
+  if(!GetConsoleCursorInfo(cm.output_handle, &cm.original_cursor))
     return FALSE;
     
   cm.console_size = csbi.dwSize;

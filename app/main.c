@@ -1004,7 +1004,6 @@ static void goto_bottom(void) {
 }
 
 static void show_secret_help_callback(void *dummy) {
-  //show_help();
   printf("Type something and finish with <ENTER> or <ESCAPE>.\n");
 }
 
@@ -1106,8 +1105,15 @@ static void show_help(void) {
   printf("\nYou can use keyboard shortcuts Ctrl+C, Ctrl+X, Ctrl+V to access the clipboard.\n");
 }
 
-static void show_help_callback(void *dummy) {
-  show_help();
+static void show_help_callback(void *_mark_mode) {
+  BOOL mark_mode = (BOOL)_mark_mode;
+  
+  if(mark_mode) {
+    printf("Mark mode active. Use arrow keys to move around, Shift+arrows to extend selection, Shift+Alt+arrows for rectangular selection.\n");
+  }
+  else {
+    show_help();
+  }
 }
 
 static void handle_sigint(int sig) {
@@ -1195,7 +1201,7 @@ static BOOL key_event_filter(void *context, const KEY_EVENT_RECORD *er) {
   if(er->bKeyDown) {
     switch(er->wVirtualKeyCode) {
       case VK_F1:
-        hyper_console_interrupt(show_help_callback, NULL);
+        hyper_console_interrupt(show_help_callback, (void*)FALSE);
         return TRUE;
       
       case VK_F2:
@@ -1206,19 +1212,30 @@ static BOOL key_event_filter(void *context, const KEY_EVENT_RECORD *er) {
   return FALSE;
 }
 
+static BOOL mark_mode_key_event_filter(void *context, const KEY_EVENT_RECORD *er) {
+  if(er->bKeyDown) {
+    if(er->wVirtualKeyCode == VK_F1) {
+      hyper_console_interrupt(show_help_callback, (void*)TRUE);
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
 int main() {
   wchar_t *str = NULL;
   struct hyper_console_settings_t settings;
   
   memset(&settings, 0, sizeof(settings));
-  settings.size = sizeof(settings);
-  settings.default_input = L"help";
-  settings.history = hyper_console_history_new(0);
-  settings.need_more_input_predicate = need_more_input_predicate;
-  settings.auto_completion = auto_completion;
-  settings.line_continuation_prompt = L"...>";
-  settings.key_event_filter = key_event_filter;
-  settings.first_tab_column = 4;
+  settings.size                       = sizeof(settings);
+  settings.default_input              = L"help";
+  settings.history                    = hyper_console_history_new(0);
+  settings.need_more_input_predicate  = need_more_input_predicate;
+  settings.auto_completion            = auto_completion;
+  settings.line_continuation_prompt   = L"...>";
+  settings.key_event_filter           = key_event_filter;
+  settings.mark_mode_key_event_filter = mark_mode_key_event_filter;
+  settings.first_tab_column           = 4;
   
   signal(SIGINT, handle_sigint);
   
