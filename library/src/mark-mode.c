@@ -304,7 +304,8 @@ static wchar_t *cat_console_line(
 }
 
 /** Get the non-block-mode selected text.
-
+  
+  \param total_length Receives the string length of the selection.
   \return The unwrapped text lines. Should be freed with hyper_console_free_memory(). NULL on error.
  */
 static wchar_t *get_selection_lines(struct console_mark_t *cm, int *total_length) {
@@ -366,7 +367,8 @@ static wchar_t *get_selection_lines(struct console_mark_t *cm, int *total_length
 
 /** Get the block-mode selected text.
 
-  \return The rectangle block of lines, trimmed ad line ends.
+  \param total_length Receives the string length of the selection.
+  \return The rectangle block of lines, trimmed at line ends.
   Should be freed with hyper_console_free_memory(). NULL on error.
  */
 static wchar_t *get_selection_block_lines(struct console_mark_t *cm, int *total_length) {
@@ -430,15 +432,26 @@ static wchar_t *get_selection_block_lines(struct console_mark_t *cm, int *total_
   return str;
 }
 
+/** Get the selected text.
+  
+  \param total_length Receives the string length of the selection.
+  \return The unwrapped text lines. Should be freed with hyper_console_free_memory(). NULL on error.
+ */
+wchar_t *console_mark_mode_get_selection(struct console_mark_t *cm, int *total_length) {
+  assert(cm           != NULL);
+  assert(total_length != NULL);
+  
+  if(cm->block_mode)
+    return get_selection_block_lines(cm, total_length);
+  else
+    return get_selection_lines(cm, total_length);
+}
+
 static void copy_output_to_clipboard(struct console_mark_t *cm) {
   wchar_t *str;
   int length;
   
-  if(cm->block_mode)
-    str = get_selection_block_lines(cm, &length);
-  else
-    str = get_selection_lines(cm, &length);
-    
+  str = console_mark_mode_get_selection(cm, &length);
   if(!str)
     return;
     
@@ -783,10 +796,7 @@ static BOOL run_mark_mode(struct console_mark_t *cm, INPUT_RECORD *event) {
       
       cm->continue_with_search = FALSE;
       
-      if(cm->block_mode)
-        filter = get_selection_block_lines(cm, &length);
-      else
-        filter = get_selection_lines(cm, &length);
+      filter = console_mark_mode_get_selection(cm, &length);
         
       console_handle_search_mode(cm->input_handle, cm->output_handle, event, filter);
       
@@ -838,6 +848,9 @@ BOOL console_handle_mark_mode(struct mark_mode_settings_t *settings, INPUT_RECOR
   if(!GetConsoleCursorInfo(cm.output_handle, &cm.original_cursor))
     return FALSE;
     
+  if(settings->mm_handle_ptr)
+    *settings->mm_handle_ptr = &cm;
+  
   cm.console_size = csbi.dwSize;
   cm.original_pos = csbi.dwCursorPosition;
   
@@ -846,6 +859,9 @@ BOOL console_handle_mark_mode(struct mark_mode_settings_t *settings, INPUT_RECOR
     
   result = run_mark_mode(&cm, event);
   finish_mark_mode(&cm);
+  
+  if(settings->mm_handle_ptr)
+    *settings->mm_handle_ptr = NULL;
   
   return result;
 }

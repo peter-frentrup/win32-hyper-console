@@ -66,6 +66,7 @@ struct console_input_t {
   int continuation_prompt_size;
   
   struct hyper_console_history_t *history;
+  struct console_mark_t *current_mark_mode; 
   
   CHAR_INFO *output_buffer; // [output_size]
   int output_capacity;
@@ -2228,7 +2229,8 @@ static BOOL input_loop(struct console_input_t *con) {
         .input_handle     = con->input_handle, 
         .output_handle    = con->output_handle,
         .callback_context = con->callback_context,
-        .key_event_filter = con->mark_mode_key_event_filter };
+        .key_event_filter = con->mark_mode_key_event_filter,
+        .mm_handle_ptr    = &con->current_mark_mode };
       if(console_handle_mark_mode(&mm, &event, FALSE))
         continue;
     }
@@ -2267,7 +2269,8 @@ static BOOL input_loop(struct console_input_t *con) {
           .input_handle     = con->input_handle, 
           .output_handle    = con->output_handle,
           .callback_context = con->callback_context,
-          .key_event_filter = con->mark_mode_key_event_filter };
+          .key_event_filter = con->mark_mode_key_event_filter,
+          .mm_handle_ptr    = &con->current_mark_mode };
         if(console_handle_mark_mode(&mm, &event, TRUE))
           break;
       }
@@ -2607,6 +2610,27 @@ void hyper_console_set_current_selection(int position, int anchor) {
     return;
   
   reselect_input(con, position, anchor);
+}
+
+HYPER_CONSOLE_API
+wchar_t *hyper_console_get_mark_mode_selection(int *total_length) {
+  int dummy_len;
+  
+  if(!total_length)
+    total_length = &dummy_len;
+  
+  *total_length = 0;
+  
+  struct console_input_t *con;
+  
+  con = get_current_input();
+  if(!con)
+    return NULL;
+  
+  if(!con->current_mark_mode)
+    return NULL;
+  
+  return console_mark_mode_get_selection(con->current_mark_mode, total_length);
 }
 
 BOOL stop_current_input(BOOL do_abort, const wchar_t *opt_replace_input) {

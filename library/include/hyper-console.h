@@ -185,6 +185,14 @@ void hyper_console_get_current_selection(int *position, int *anchor);
 HYPER_CONSOLE_API
 void hyper_console_set_current_selection(int position, int anchor);
 
+/**Get the the selected text in mark-mode.
+
+  \param total_length Optional. Receives the string length of the selection.
+  \return The unwrapped text lines. Must be freed with hyper_console_free_memory(). NULL on error (e.g. when mark mode is not active).
+ */
+HYPER_CONSOLE_API
+wchar_t *hyper_console_get_mark_mode_selection(int *total_length);
+
 
 /** Allocate a block of memory.
  */

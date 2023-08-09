@@ -1109,7 +1109,17 @@ static void show_help_callback(void *_mark_mode) {
   BOOL mark_mode = (BOOL)_mark_mode;
   
   if(mark_mode) {
-    printf("Mark mode active. Use arrow keys to move around, Shift+arrows to extend selection, Shift+Alt+arrows for rectangular selection.\n");
+    wchar_t *mm_sel = hyper_console_get_mark_mode_selection(NULL);
+    
+    if(mm_sel) {
+      printf("Marked '");
+      write_unicode(mm_sel);
+      printf("'\n");
+    }
+    else
+      printf("Mark mode active. Use arrow keys to move around, Shift+arrows to extend selection, Shift+Alt+arrows for rectangular selection.\n");
+    
+    hyper_console_free_memory(mm_sel);
   }
   else {
     show_help();
