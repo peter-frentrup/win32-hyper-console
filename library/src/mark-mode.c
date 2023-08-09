@@ -538,7 +538,7 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
   
   if(cm->active) {    
     if(cm->key_event_filter(cm->callback_context, er))
-      return;
+      return TRUE;
   }
   
   if(!er->bKeyDown)
