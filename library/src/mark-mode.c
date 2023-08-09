@@ -659,11 +659,9 @@ static BOOL mark_mode_handle_key_event(struct console_mark_t *cm, KEY_EVENT_RECO
         return TRUE;
         
       case VK_SPACE:
-        if(!have_selected_output(cm)) {
-          if(hyperlink_system_click(cm->pos)) {
-            cm->stop = TRUE;
-            return TRUE;
-          }
+        if(hyperlink_system_click(cm->pos, cm->anchor)) {
+          cm->stop = TRUE;
+          return TRUE;
         }
         console_alert(cm->output_handle);
         return TRUE;

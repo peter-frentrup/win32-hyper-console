@@ -85,7 +85,7 @@ static void deactivate_link(struct hyperlink_collection_t *hc, struct hyperlink_
 static void activate_all_links(struct hyperlink_collection_t *hc);
 static void deactivate_all_links(struct hyperlink_collection_t *hc);
 
-static BOOL hs_click(struct hyperlink_collection_t *hc, COORD local);
+static BOOL hs_click(struct hyperlink_collection_t *hc, COORD local, COORD local_end);
 static BOOL hs_get_hover_title(struct hyperlink_collection_t *hc, COORD local, COORD local_end, wchar_t *buf, size_t buf_len);
 static BOOL hs_find_next_link(struct hyperlink_collection_t *hc, COORD *pos, COORD *endpos, BOOL forward);
 
@@ -722,11 +722,23 @@ static void deactivate_all_links(struct hyperlink_collection_t *hc) {
   }
 }
 
-static BOOL hs_click(struct hyperlink_collection_t *hc, COORD local) {
+static BOOL hs_click(struct hyperlink_collection_t *hc, COORD local, COORD local_end) {
   struct hyperlink_t *link = find_link(hc, local);
   
   if(!link)
     return FALSE;
+  
+  if(local_end.X != local.X || local_end.Y != local.Y) {
+    int end_line, end_column;
+    if(!console_scollback_local_to_global(hc->scrollback, local_end, &end_line, &end_column))
+      return FALSE;
+    
+    BOOL start_ok = is_global_position_before(link->start_global_line, link->start_column, end_line, end_column);
+    BOOL end_ok   = is_global_position_before(end_line, end_column, link->end_global_line, link->end_column);
+    
+    if(!start_ok || !end_ok)
+      return FALSE;
+  }
     
   return stop_current_input(FALSE, link->input_text);
 }
@@ -1215,7 +1227,7 @@ BOOL hyperlink_system_local_to_global(COORD local, int *line, int *column) {
   return result;
 }
 
-BOOL hyperlink_system_click(COORD local) {
+BOOL hyperlink_system_click(COORD local, COORD local_end) {
   BOOL handled;
   
   if(!_have_hyperlink_system)
@@ -1223,7 +1235,7 @@ BOOL hyperlink_system_click(COORD local) {
     
   EnterCriticalSection(_cs_global_links);
   
-  handled = hs_click(_global_links, local);
+  handled = hs_click(_global_links, local, local_end);
   
   LeaveCriticalSection(_cs_global_links);
   

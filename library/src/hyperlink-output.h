@@ -12,7 +12,7 @@ void hyperlink_system_paste_and_activate_links(struct dangling_hyperlinks_t *lin
 
 BOOL hyperlink_system_local_to_global(COORD local, int *line, int *column);
 
-BOOL hyperlink_system_click(COORD local);
+BOOL hyperlink_system_click(COORD local, COORD local_end);
 BOOL hyperlink_system_get_hover_title(COORD local, COORD local_end, wchar_t *buf, size_t buf_len);
 BOOL hyperlink_system_find_next_link(COORD *pos, COORD *endpos, BOOL forward);
 
