@@ -2616,14 +2616,12 @@ HYPER_CONSOLE_API
 wchar_t *hyper_console_get_mark_mode_selection(int *total_length) {
   int dummy_len;
   
-  if(!total_length)
+  if(!total_length) 
     total_length = &dummy_len;
   
   *total_length = 0;
   
-  struct console_input_t *con;
-  
-  con = get_current_input();
+  struct console_input_t *con = get_current_input();
   if(!con)
     return NULL;
   
@@ -2631,6 +2629,27 @@ wchar_t *hyper_console_get_mark_mode_selection(int *total_length) {
     return NULL;
   
   return console_mark_mode_get_selection(con->current_mark_mode, total_length);
+}
+
+HYPER_CONSOLE_API
+wchar_t *hyper_console_get_mark_mode_line(int *line_length, int *pos_in_line) {
+  int dummy_len;
+  int dummy_pos;
+  
+  if(!line_length) line_length = &dummy_len;
+  if(!pos_in_line) pos_in_line = &dummy_pos;
+  
+  *line_length = 0;
+  *pos_in_line = 0;
+  
+  struct console_input_t *con = get_current_input();
+  if(!con)
+    return NULL;
+  
+  if(!con->current_mark_mode)
+    return NULL;
+  
+  return console_mark_mode_get_cursor_line(con->current_mark_mode, line_length, pos_in_line);
 }
 
 BOOL stop_current_input(BOOL do_abort, const wchar_t *opt_replace_input) {

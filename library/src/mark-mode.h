@@ -19,5 +19,6 @@ BOOL console_handle_mark_mode(
   BOOL                         force_mark_mode);
 
 wchar_t *console_mark_mode_get_selection(struct console_mark_t *cm, int *total_length);
+wchar_t *console_mark_mode_get_cursor_line(struct console_mark_t *cm, int *line_length, int *pos_in_line);
 
 #endif // __CONSOLE__MARK_MODE_H__

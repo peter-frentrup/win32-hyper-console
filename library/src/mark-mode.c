@@ -447,6 +447,37 @@ wchar_t *console_mark_mode_get_selection(struct console_mark_t *cm, int *total_l
     return get_selection_lines(cm, total_length);
 }
 
+wchar_t *console_mark_mode_get_cursor_line(struct console_mark_t *cm, int *line_length, int *pos_in_line) {
+  assert(cm != NULL);
+  assert(line_length != NULL);
+  assert(pos_in_line != NULL);
+  
+  COORD start = { .X = 0, .Y = cm->pos.Y };
+  
+  int      length = cm->console_size.X;
+  wchar_t *str    = hyper_console_allocate_memory(sizeof(wchar_t) * (length + 1));
+  if(!str) {
+    *pos_in_line = 0;
+    *line_length = 0;
+    return NULL;
+  }
+  
+  DWORD read_count = 0;
+  console_read_output_character(
+    cm->output_handle,
+    str,
+    length,
+    start,
+    &read_count);
+  
+  length = read_count;
+  str[length] = '\0';
+  
+  *pos_in_line = cm->pos.X < length ? cm->pos.X : length;
+  *line_length = length;
+  return str;
+}
+
 static void copy_output_to_clipboard(struct console_mark_t *cm) {
   wchar_t *str;
   int length;
