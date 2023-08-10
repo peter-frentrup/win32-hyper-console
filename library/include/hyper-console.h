@@ -5,6 +5,9 @@
 #include <hyper-console-config.h>
 
 
+#define HYPER_CONSOLE_VERSION  0x00010001
+
+
 /** An opaque structure that holds the current command history.
  */
 struct hyper_console_history_t;
